@@ -27,11 +27,10 @@ const navigation = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { user, clearAuth } = useAuthStore();
+  const { user, logout } = useAuthStore();
 
   const handleLogout = () => {
-    clearAuth();
-    window.location.href = '/login';
+    logout();
   };
 
   return (

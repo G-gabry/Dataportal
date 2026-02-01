@@ -10,11 +10,24 @@ class ScrapeJobCreate(BaseModel):
     job_type: str = "FULL_SCRAPE"  # FULL_SCRAPE, UPDATE_IMPORTANT, RE_SCRAPE
 
 
+class SourceInfo(BaseModel):
+    id: UUID
+    name: str
+    type: str
+    base_url: str
+
+    class Config:
+        from_attributes = True
+
+
 class ScrapeJobResponse(BaseModel):
     id: UUID
     source_id: Optional[UUID]
     job_type: str
     status: JobStatus
+
+    # Source info
+    source: Optional[SourceInfo] = None
 
     # Progress
     current_step: Optional[str]

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 from typing import Optional
 from uuid import UUID
@@ -27,7 +27,7 @@ def list_jobs(
     current_user: User = Depends(get_current_user)
 ):
     """List scrape jobs with filtering and pagination"""
-    query = db.query(ScrapeJob)
+    query = db.query(ScrapeJob).options(joinedload(ScrapeJob.source))
 
     # Apply filters
     if source_id:
@@ -35,8 +35,13 @@ def list_jobs(
     if status:
         query = query.filter(ScrapeJob.status == status)
 
-    # Get total count
-    total = query.count()
+    # Get total count (without joinedload for efficiency)
+    count_query = db.query(ScrapeJob)
+    if source_id:
+        count_query = count_query.filter(ScrapeJob.source_id == source_id)
+    if status:
+        count_query = count_query.filter(ScrapeJob.status == status)
+    total = count_query.count()
 
     # Apply pagination
     offset = (page - 1) * page_size
@@ -58,7 +63,7 @@ def get_job(
     current_user: User = Depends(get_current_user)
 ):
     """Get a specific job by ID"""
-    job = db.query(ScrapeJob).filter(ScrapeJob.id == job_id).first()
+    job = db.query(ScrapeJob).options(joinedload(ScrapeJob.source)).filter(ScrapeJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return ScrapeJobResponse.model_validate(job)

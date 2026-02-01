@@ -90,12 +90,21 @@ export interface Item {
   updated_at: string;
 }
 
+// Source Info (for job display)
+export interface SourceInfo {
+  id: string;
+  name: string;
+  type: string;
+  base_url: string;
+}
+
 // Scrape Job
 export interface ScrapeJob {
   id: string;
   source_id: string | null;
   job_type: string;
   status: JobStatus;
+  source: SourceInfo | null;
   current_step: string | null;
   progress_percent: number;
   urls_discovered: number;

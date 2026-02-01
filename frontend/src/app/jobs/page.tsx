@@ -108,6 +108,7 @@ export default function JobsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Source</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Progress</TableHead>
@@ -121,6 +122,12 @@ export default function JobsPage() {
                   <TableBody>
                     {jobsData?.items.map((job) => (
                       <TableRow key={job.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{job.source?.name || 'Unknown'}</p>
+                            <p className="text-xs text-gray-500">{job.source?.type || ''}</p>
+                          </div>
+                        </TableCell>
                         <TableCell className="font-medium">{job.job_type}</TableCell>
                         <TableCell>
                           <span
