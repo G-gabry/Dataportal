@@ -11,7 +11,7 @@ import Input from '@/components/ui/Input';
 import Badge from '@/components/ui/Badge';
 import { items, schemas } from '@/lib/api';
 import { formatDateTime, getStatusColor, getItemTypeLabel } from '@/lib/utils';
-import { ArrowLeft, Save, CheckCircle, Send } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle, Send, ChevronDown, ChevronRight, Database } from 'lucide-react';
 
 export default function ItemDetailPage() {
   const params = useParams();
@@ -22,6 +22,11 @@ export default function ItemDetailPage() {
   const [editedData, setEditedData] = useState<Record<string, any>>({});
   const [notes, setNotes] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [expandedUrls, setExpandedUrls] = useState<Record<string, boolean>>({});
+
+  const toggleUrl = (url: string) => {
+    setExpandedUrls(prev => ({ ...prev, [url]: !prev[url] }));
+  };
 
   const { data: item, isLoading } = useQuery({
     queryKey: ['item', itemId],
@@ -288,18 +293,6 @@ export default function ItemDetailPage() {
                   renderField(fieldName, fieldInfo, item.data[fieldName])
                 )}
 
-                {/* Custom fields */}
-                {item.custom_fields && Object.keys(item.custom_fields).length > 0 && (
-                  <div className="mt-6">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Custom Fields</h4>
-                    {Object.entries(item.custom_fields).map(([key, value]) => (
-                      <div key={key} className="border-b py-2">
-                        <label className="text-sm font-medium text-gray-500">{key}</label>
-                        <p className="mt-1 text-gray-900">{String(value)}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </CardContent>
             </Card>
 
@@ -322,6 +315,47 @@ export default function ItemDetailPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* AI Source Data */}
+            {item.custom_fields?.ai_input && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center space-x-2">
+                    <Database className="h-4 w-4 text-gray-500" />
+                    <CardTitle>AI Source Data</CardTitle>
+                    <Badge variant="default">
+                      {Object.keys(item.custom_fields.ai_input).length} pages
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Raw content sent to AI to generate this item
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {Object.entries(item.custom_fields.ai_input as Record<string, string>).map(([url, content]) => (
+                    <div key={url} className="border rounded-md overflow-hidden">
+                      <button
+                        onClick={() => toggleUrl(url)}
+                        className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 text-left"
+                      >
+                        <span className="text-xs text-blue-600 truncate font-mono">{url}</span>
+                        {expandedUrls[url]
+                          ? <ChevronDown className="h-3 w-3 text-gray-400 flex-shrink-0 ml-2" />
+                          : <ChevronRight className="h-3 w-3 text-gray-400 flex-shrink-0 ml-2" />
+                        }
+                      </button>
+                      {expandedUrls[url] && (
+                        <div className="px-3 py-2 bg-white">
+                          <pre className="text-xs text-gray-600 whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                            {content}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Sidebar */}

@@ -274,7 +274,13 @@ class ScrapePipeline:
         self.db.commit()
 
     async def _extract_data(self, pages: List[ScrapeResult]):
-        """Extract simplified data (Name, URL, Country, Summary) from pages"""
+        """
+        Combine ALL crawled pages into one JSON input → AI extracts ONE item per source.
+        - name  = source.name  (not from AI)
+        - url   = source.base_url  (not from AI)
+        - AI extracts: country, summary
+        - AI input stored in custom_fields.ai_input for admin inspection
+        """
         ai_provider = get_ai_provider(self.db, TaskType.EXTRACTION)
 
         target_types = [
@@ -282,99 +288,113 @@ class ScrapePipeline:
             for t in self.source.target_item_types
         ]
 
-        # Process pages in batches
-        batch_size = 10
-        total_pages = len(pages)
+        # Build combined JSON: {url: content} for ALL pages
+        content_json: Dict[str, str] = {}
+        for page in pages:
+            if page.markdown:
+                content_json[page.url] = page.markdown[:2000]  # limit per page
 
-        for i in range(0, total_pages, batch_size):
-            batch = pages[i:i + batch_size]
-            progress = 50 + int(45 * (i + len(batch)) / total_pages)
-            await self._update_step(f"Extracting: {i + len(batch)}/{total_pages}", progress)
+        if not content_json:
+            print(f"[Scrape] No content to extract from")
+            return
 
-            for page in batch:
-                if not page.markdown:
-                    continue
+        print(f"[Scrape] Sending {len(content_json)} pages to AI for source: {self.source.name}")
+        await self._update_step("Extracting data (50%)", 50)
 
-                # Get discovered URL record
-                discovered = self.db.query(DiscoveredURL).filter(
-                    DiscoveredURL.source_id == self.source.id,
-                    DiscoveredURL.url == page.url
+        for item_type in target_types:
+            schema = self.db.query(ItemSchema).filter(
+                ItemSchema.item_type == item_type,
+                ItemSchema.is_active == True
+            ).first()
+
+            if not schema:
+                continue
+
+            extracted = await self._extract_from_source(content_json, item_type, ai_provider)
+
+            if extracted:
+                # Name and URL always come from source, not AI
+                item_data = {
+                    "name": self.source.name,
+                    "url": self.source.base_url,
+                    "country": extracted.get("country"),
+                    "summary": extracted.get("summary"),
+                }
+
+                # Check if item already exists for this source
+                existing = self.db.query(Item).filter(
+                    Item.source_id == self.source.id,
+                    Item.item_type == item_type
                 ).first()
 
-                # Extract for each target item type
-                for item_type in target_types:
-                    schema = self.db.query(ItemSchema).filter(
-                        ItemSchema.item_type == item_type,
-                        ItemSchema.is_active == True
-                    ).first()
-
-                    if not schema:
-                        continue
-
-                    # Use simplified extraction
-                    extracted = await self._extract_simplified(
-                        page.markdown,
-                        page.url,
-                        item_type,
-                        ai_provider
+                if existing:
+                    # Update existing item
+                    existing.data = item_data
+                    existing.custom_fields = {"ai_input": content_json}
+                    existing.extraction_confidence = 80
+                    existing.extracted_at = datetime.now(timezone.utc)
+                    print(f"[Scrape] Updated item: {self.source.name}")
+                else:
+                    # Create new item
+                    item = Item(
+                        source_id=self.source.id,
+                        item_type=item_type,
+                        data=item_data,
+                        custom_fields={"ai_input": content_json},
+                        extraction_confidence=80,
+                        status=ItemStatus.DRAFT,
+                        extracted_at=datetime.now(timezone.utc),
                     )
+                    self.db.add(item)
+                    self.job.items_extracted += 1
+                    print(f"[Scrape] Created item: {self.source.name}")
 
-                    if extracted and extracted.get("name"):
-                        # Check for duplicate
-                        existing = self.db.query(Item).filter(
-                            Item.source_id == self.source.id,
-                            Item.data["name"].astext == extracted["name"]
-                        ).first()
+        # Mark all discovered URLs as extracted
+        for page in pages:
+            disc = self.db.query(DiscoveredURL).filter(
+                DiscoveredURL.source_id == self.source.id,
+                DiscoveredURL.url == page.url
+            ).first()
+            if disc:
+                disc.status = URLStatus.EXTRACTED
 
-                        if not existing:
-                            item = Item(
-                                source_id=self.source.id,
-                                discovered_url_id=discovered.id if discovered else None,
-                                item_type=item_type,
-                                data=extracted,
-                                extraction_confidence=80,
-                                status=ItemStatus.DRAFT,
-                                extracted_at=datetime.now(timezone.utc),
-                            )
-                            self.db.add(item)
-                            self.job.items_extracted += 1
+        self.db.commit()
 
-                if discovered:
-                    discovered.status = URLStatus.EXTRACTED
-
-            self.db.commit()
-
-    async def _extract_simplified(
+    async def _extract_from_source(
         self,
-        content: str,
-        url: str,
+        content_json: Dict[str, str],
         item_type: ItemType,
         ai_provider
     ) -> Optional[Dict[str, Any]]:
-        """Extract simplified data using AI"""
+        """
+        Send all pages from a source to AI and extract ONE item.
+        Input:  {url: page_content, sub_url: page_content, ...} for all crawled pages
+        Output: {country, summary}
+        """
         type_name = item_type.value.lower()
 
-        prompt = f"""Extract {type_name} information from this page content.
+        prompt = f"""You are extracting information about an organization called "{self.source.name}" that offers {type_name}s.
 
-Return a JSON object with these fields ONLY:
-- name: The full name of the {type_name}
-- url: "{url}"
-- country: The country where this {type_name} is offered/located
-- summary: A brief 2-3 sentence summary
+Below is a JSON where each key is a page URL and its value is the page content from their website ({self.source.base_url}).
+Analyze ALL pages together and extract:
 
-If this page is NOT about a {type_name}, return {{"name": null}}.
+- country: The country where this organization is based or primarily operates
+- summary: A 2-3 sentence description of what this organization offers (focus on {type_name}s)
 
-Content:
-{content[:8000]}
+Input pages:
+{json.dumps(content_json, ensure_ascii=False)[:12000]}
 
-Return ONLY valid JSON, no other text."""
+Return ONLY this JSON, no other text:
+{{
+  "country": "...",
+  "summary": "..."
+}}"""
 
         try:
             result = await ai_provider.generate_json(prompt)
 
-            # Log AI usage
             ai_log = AILog(
-                task_type="EXTRACT_SIMPLIFIED",
+                task_type="EXTRACT_SOURCE",
                 model_used=ai_provider.model,
                 provider=ai_provider.provider_name,
                 job_id=self.job.id,
@@ -384,7 +404,7 @@ Return ONLY valid JSON, no other text."""
             )
             self.db.add(ai_log)
 
-            print(f"[Scrape] AI result for {url}: parsed={result.parsed_json}, error={result.error}, raw={result.content[:200] if result.content else 'empty'}")
+            print(f"[Scrape] AI extracted for {self.source.name}: {result.parsed_json}, error={result.error}")
             return result.parsed_json
 
         except Exception as e:

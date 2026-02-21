@@ -78,19 +78,7 @@ export default function ItemsPage() {
   });
 
   const getItemTitle = (item: Item) => {
-    const data = item.data;
-    switch (item.item_type) {
-      case 'PROGRAM':
-        return data.program_name || data.university_name || 'Unnamed Program';
-      case 'SCHOLARSHIP':
-        return data.scholarship_name || data.provider || 'Unnamed Scholarship';
-      case 'CONFERENCE':
-        return data.conference_name || data.acronym || 'Unnamed Conference';
-      case 'EXCHANGE':
-        return data.program_name || data.host_university || 'Unnamed Exchange';
-      default:
-        return 'Unknown Item';
-    }
+    return item.data?.name || 'Unnamed';
   };
 
   return (
