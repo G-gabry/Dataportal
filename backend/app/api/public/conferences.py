@@ -1,10 +1,14 @@
+"""
+Public API for Conferences - Production Ready
+
+Returns simplified conference data: name, url, country, summary
+"""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import Optional
 from uuid import UUID
 from math import ceil
-from datetime import date
 
 from app.core.database import get_db
 from app.models.item import Item
@@ -13,58 +17,80 @@ from app.models.enums import ItemType, ItemStatus
 router = APIRouter()
 
 
+def serialize_conference(item: Item) -> dict:
+    """Serialize conference item for API response"""
+    return {
+        "id": str(item.id),
+        "name": item.data.get("name"),
+        "url": item.data.get("url"),
+        "country": item.data.get("country"),
+        "summary": item.data.get("summary"),
+        "source_id": str(item.source_id) if item.source_id else None,
+        "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+    }
+
+
 @router.get("")
 def list_conferences(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    field: Optional[str] = None,
-    country: Optional[str] = None,
-    is_virtual: Optional[bool] = None,
-    upcoming_only: bool = True,
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    country: Optional[str] = Query(None, description="Filter by country"),
+    search: Optional[str] = Query(None, description="Search in name and summary"),
     db: Session = Depends(get_db)
 ):
-    """List published conferences with filtering"""
+    """
+    List all published conferences.
+
+    Returns paginated list with simplified fields: name, url, country, summary.
+    """
     query = db.query(Item).filter(
         Item.item_type == ItemType.CONFERENCE,
         Item.status == ItemStatus.PUBLISHED
     )
 
-    # Apply filters on JSON data
-    if field:
-        query = query.filter(Item.data["field"].astext.ilike(f"%{field}%"))
+    # Apply filters
     if country:
         query = query.filter(Item.data["country"].astext.ilike(f"%{country}%"))
-    if is_virtual is not None:
-        query = query.filter(Item.data["is_virtual"].astext == str(is_virtual).lower())
+
+    if search:
+        query = query.filter(
+            (Item.data["name"].astext.ilike(f"%{search}%")) |
+            (Item.data["summary"].astext.ilike(f"%{search}%"))
+        )
 
     total = query.count()
     offset = (page - 1) * page_size
     items = query.order_by(desc(Item.updated_at)).offset(offset).limit(page_size).all()
 
     return {
-        "items": [
-            {
-                "id": str(item.id),
-                "type": item.item_type.value,
-                "data": item.data,
-                "tags": item.tags,
-                "updated_at": item.updated_at.isoformat() if item.updated_at else None
-            }
-            for item in items
-        ],
+        "items": [serialize_conference(item) for item in items],
         "total": total,
         "page": page,
         "page_size": page_size,
-        "total_pages": ceil(total / page_size) if total > 0 else 1
+        "total_pages": ceil(total / page_size) if total > 0 else 1,
     }
 
 
+@router.get("/countries")
+def get_conference_countries(db: Session = Depends(get_db)):
+    """Get list of all countries with conferences"""
+    items = db.query(Item).filter(
+        Item.item_type == ItemType.CONFERENCE,
+        Item.status == ItemStatus.PUBLISHED
+    ).all()
+
+    countries = set()
+    for item in items:
+        country = item.data.get("country")
+        if country:
+            countries.add(country)
+
+    return {"countries": sorted(list(countries))}
+
+
 @router.get("/{conference_id}")
-def get_conference(
-    conference_id: UUID,
-    db: Session = Depends(get_db)
-):
-    """Get a specific conference"""
+def get_conference(conference_id: UUID, db: Session = Depends(get_db)):
+    """Get a specific conference by ID"""
     item = db.query(Item).filter(
         Item.id == conference_id,
         Item.item_type == ItemType.CONFERENCE,
@@ -74,39 +100,4 @@ def get_conference(
     if not item:
         raise HTTPException(status_code=404, detail="Conference not found")
 
-    return {
-        "id": str(item.id),
-        "type": item.item_type.value,
-        "data": item.data,
-        "custom_fields": item.custom_fields,
-        "tags": item.tags,
-        "updated_at": item.updated_at.isoformat() if item.updated_at else None
-    }
-
-
-@router.get("/filters/options")
-def get_conference_filter_options(db: Session = Depends(get_db)):
-    """Get available filter options for conferences"""
-    items = db.query(Item).filter(
-        Item.item_type == ItemType.CONFERENCE,
-        Item.status == ItemStatus.PUBLISHED
-    ).all()
-
-    fields = set()
-    countries = set()
-    topics = set()
-
-    for item in items:
-        if item.data.get("field"):
-            fields.add(item.data["field"])
-        if item.data.get("country"):
-            countries.add(item.data["country"])
-        if item.data.get("topics"):
-            for t in item.data["topics"]:
-                topics.add(t)
-
-    return {
-        "fields": sorted(list(fields)),
-        "countries": sorted(list(countries)),
-        "topics": sorted(list(topics))
-    }
+    return serialize_conference(item)

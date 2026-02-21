@@ -122,6 +122,17 @@ export interface ScrapeJob {
   created_at: string;
 }
 
+// Public Item (simplified schema for public API)
+export interface PublicItem {
+  id: string;
+  name: string | null;
+  url: string | null;
+  country: string | null;
+  summary: string | null;
+  source_id: string | null;
+  updated_at: string | null;
+}
+
 // Paginated Response
 export interface PaginatedResponse<T> {
   items: T[];

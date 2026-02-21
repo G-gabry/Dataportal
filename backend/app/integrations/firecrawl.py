@@ -1,8 +1,18 @@
+"""
+Firecrawl Client - Production integration with Firecrawl VM.
+
+Supports:
+- Dynamic VM IP lookup via GCP Compute API
+- Crawl endpoint (async job-based scraping)
+- Scrape endpoint (single URL)
+- Map endpoint (URL discovery)
+- Retry logic for transient failures
+"""
 import httpx
-from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
-from app.config import settings
 import asyncio
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass, field
+from app.config import settings
 
 
 @dataclass
@@ -23,34 +33,306 @@ class ScrapeResult:
     error: Optional[str] = None
 
 
+@dataclass
+class CrawlResult:
+    """Result from a crawl job"""
+    success: bool
+    job_id: Optional[str] = None
+    status: Optional[str] = None  # "scraping", "completed", "failed"
+    total: int = 0
+    completed: int = 0
+    pages: List[ScrapeResult] = field(default_factory=list)
+    error: Optional[str] = None
+    next_url: Optional[str] = None
+
+
 class FirecrawlClient:
-    """Client for Firecrawl API"""
+    """Client for Firecrawl API with dynamic VM IP support"""
 
     def __init__(self, api_key: str = None, base_url: str = None):
         self.api_key = api_key or settings.FIRECRAWL_API_KEY
-        self.base_url = base_url or settings.FIRECRAWL_BASE_URL
-        self.use_mock = not self.api_key or self.api_key == "mock"
+        self.use_mock = self.api_key == "mock"
 
-    async def map_domain(self, url: str, limit: int = 1000) -> MapResult:
+        # Cache the base URL to avoid repeated lookups
+        if base_url:
+            self._cached_base_url = base_url
+        else:
+            self._cached_base_url = self._resolve_base_url()
+
+    def _resolve_base_url(self) -> str:
+        """Resolve and cache base URL once"""
+        # First try environment variable (most reliable)
+        import os
+        vm_ip = os.environ.get("FIRECRAWL_VM_IP")
+        if vm_ip:
+            return f"http://{vm_ip}:3002"
+
+        # Use config setting
+        if settings.FIRECRAWL_BASE_URL and "localhost" not in settings.FIRECRAWL_BASE_URL:
+            return settings.FIRECRAWL_BASE_URL
+
+        # Try dynamic VM service as last resort
+        try:
+            from app.services.vm_service import VMService
+            return VMService.get_firecrawl_base_url()
+        except Exception as e:
+            print(f"[Firecrawl] Error getting VM IP: {e}")
+            return settings.FIRECRAWL_BASE_URL
+
+    @property
+    def base_url(self) -> str:
+        """Get cached base URL"""
+        return self._cached_base_url
+
+    def _headers(self) -> Dict[str, str]:
+        """Get headers for API requests"""
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    # ---------------------------------------------------------------
+    # CRAWL — Async job-based scraping (primary method for production)
+    # ---------------------------------------------------------------
+    async def start_crawl(
+        self,
+        url: str,
+        limit: int = 100,
+        wait_for: int = 10000,
+        scrape_options: Dict[str, Any] = None,
+    ) -> CrawlResult:
         """
-        Get all URLs from a domain.
-        Returns a list of discovered URLs.
+        Start an async crawl job.
+
+        Args:
+            url: The URL to start crawling from
+            limit: Maximum number of pages to crawl
+            wait_for: Time to wait for page load in ms
+            scrape_options: Additional scrape options
+
+        Returns:
+            CrawlResult with job_id for polling
         """
+        if self.use_mock:
+            return CrawlResult(
+                success=True,
+                job_id="mock-crawl-job",
+                status="completed",
+            )
+
+        payload = {
+            "url": url,
+            "limit": limit,
+            "scrapeOptions": scrape_options or {
+                "formats": ["markdown"],
+                "waitFor": wait_for,
+            },
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/v1/crawl",
+                    headers=self._headers(),
+                    json=payload
+                )
+
+                if response.status_code not in (200, 201):
+                    return CrawlResult(
+                        success=False,
+                        error=f"Crawl start failed: {response.status_code} - {response.text}"
+                    )
+
+                data = response.json()
+                return CrawlResult(
+                    success=True,
+                    job_id=data.get("id") or data.get("jobId"),
+                    status="scraping",
+                )
+
+        except Exception as e:
+            return CrawlResult(success=False, error=str(e))
+
+    async def get_crawl_status(self, job_id: str, retries: int = 3) -> CrawlResult:
+        """Poll a crawl job for its current status and results with retry"""
+        last_error = None
+
+        for attempt in range(retries):
+            try:
+                async with httpx.AsyncClient(
+                    timeout=httpx.Timeout(30.0, connect=10.0),
+                    limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+                ) as client:
+                    response = await client.get(
+                        f"{self.base_url}/v1/crawl/{job_id}",
+                        headers=self._headers(),
+                    )
+
+                    if response.status_code != 200:
+                        return CrawlResult(
+                            success=False,
+                            error=f"Status check failed: {response.status_code}"
+                        )
+
+                    data = response.json()
+                    status = data.get("status", "unknown")
+                    pages = []
+
+                    for page_data in data.get("data", []):
+                        md = page_data.get("markdown", "")
+                        meta = page_data.get("metadata", {})
+                        url = meta.get("sourceURL") or meta.get("url", "")
+                        title = meta.get("title", "")
+                        pages.append(ScrapeResult(
+                            success=True,
+                            url=url,
+                            markdown=md,
+                            title=title,
+                        ))
+
+                    return CrawlResult(
+                        success=True,
+                        job_id=job_id,
+                        status=status,
+                        total=data.get("total", 0),
+                        completed=data.get("completed", 0),
+                        pages=pages,
+                        next_url=data.get("next") or data.get("nextURL"),
+                    )
+
+            except Exception as e:
+                last_error = str(e)
+                if attempt < retries - 1:
+                    await asyncio.sleep(2)  # Wait before retry
+                continue
+
+        return CrawlResult(success=False, error=last_error)
+
+    async def poll_crawl_until_done(
+        self,
+        job_id: str,
+        poll_interval: int = 10,
+        max_wait: int = 3600,
+        on_progress=None,
+    ) -> CrawlResult:
+        """
+        Poll a crawl job until completion.
+
+        Args:
+            job_id: The crawl job ID
+            poll_interval: Seconds between polls
+            max_wait: Maximum seconds to wait
+            on_progress: Optional callback(completed, total)
+
+        Returns:
+            Final CrawlResult with all pages
+        """
+        elapsed = 0
+        all_pages = []
+        seen_urls = set()
+
+        while elapsed < max_wait:
+            result = await self.get_crawl_status(job_id)
+
+            if not result.success:
+                return result
+
+            # Collect new pages (dedupe by URL)
+            for page in result.pages:
+                normalized = (page.url or "").rstrip("/")
+                if normalized and normalized not in seen_urls:
+                    seen_urls.add(normalized)
+                    all_pages.append(page)
+
+            if on_progress:
+                await on_progress(result.completed, result.total)
+
+            if result.status == "completed":
+                # Handle pagination if present
+                if result.next_url:
+                    await self._fetch_pagination(result.next_url, all_pages, seen_urls)
+
+                return CrawlResult(
+                    success=True,
+                    job_id=job_id,
+                    status="completed",
+                    total=result.total,
+                    completed=len(all_pages),
+                    pages=all_pages,
+                )
+
+            elif result.status == "failed":
+                return CrawlResult(
+                    success=False,
+                    job_id=job_id,
+                    status="failed",
+                    error="Crawl job failed",
+                    pages=all_pages,
+                )
+
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+
+        return CrawlResult(
+            success=True,
+            job_id=job_id,
+            status="timeout",
+            total=result.total if result else 0,
+            completed=len(all_pages),
+            pages=all_pages,
+        )
+
+    async def _fetch_pagination(
+        self,
+        next_url: str,
+        all_pages: List[ScrapeResult],
+        seen_urls: set
+    ):
+        """Fetch additional pages from pagination URL"""
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                while next_url:
+                    response = await client.get(next_url, headers=self._headers())
+                    if response.status_code != 200:
+                        break
+
+                    data = response.json()
+                    next_url = data.get("next") or data.get("nextURL")
+
+                    for page_data in data.get("data", []):
+                        md = page_data.get("markdown", "")
+                        meta = page_data.get("metadata", {})
+                        url = meta.get("sourceURL") or meta.get("url", "")
+
+                        normalized = url.rstrip("/")
+                        if normalized and normalized not in seen_urls:
+                            seen_urls.add(normalized)
+                            all_pages.append(ScrapeResult(
+                                success=True,
+                                url=url,
+                                markdown=md,
+                                title=meta.get("title", ""),
+                            ))
+
+                    await asyncio.sleep(1)  # Polite delay
+
+        except Exception as e:
+            print(f"[Firecrawl] Pagination error: {e}")
+
+    # ---------------------------------------------------------------
+    # MAP — URL discovery via sitemap
+    # ---------------------------------------------------------------
+    async def map_domain(self, url: str, limit: int = 100000) -> MapResult:
+        """Get all URLs from a domain via sitemap"""
         if self.use_mock:
             return self._mock_map_domain(url)
 
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 response = await client.post(
                     f"{self.base_url}/v1/map",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "url": url,
-                        "limit": limit
-                    }
+                    headers=self._headers(),
+                    json={"url": url, "limit": limit}
                 )
 
                 if response.status_code != 200:
@@ -61,44 +343,47 @@ class FirecrawlClient:
                     )
 
                 data = response.json()
-                return MapResult(
-                    success=True,
-                    urls=data.get("links", [])
-                )
+                return MapResult(success=True, urls=data.get("links", []))
 
         except Exception as e:
-            return MapResult(
-                success=False,
-                urls=[],
-                error=str(e)
-            )
+            return MapResult(success=False, urls=[], error=str(e))
 
-    async def scrape_url(self, url: str) -> ScrapeResult:
-        """
-        Scrape a single URL and return markdown content.
-        """
+    # ---------------------------------------------------------------
+    # SCRAPE — Single URL scraping
+    # ---------------------------------------------------------------
+    async def scrape_url(
+        self,
+        url: str,
+        wait_for: int = 5000,
+        actions: List[Dict[str, Any]] = None,
+    ) -> ScrapeResult:
+        """Scrape a single URL and return markdown content"""
         if self.use_mock:
             return self._mock_scrape_url(url)
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            payload = {
+                "url": url,
+                "formats": ["markdown"],
+                "onlyMainContent": False,
+                "waitFor": wait_for,
+            }
+
+            if actions:
+                payload["actions"] = actions
+
+            async with httpx.AsyncClient(timeout=90.0) as client:
                 response = await client.post(
                     f"{self.base_url}/v1/scrape",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "url": url,
-                        "formats": ["markdown"]
-                    }
+                    headers=self._headers(),
+                    json=payload
                 )
 
                 if response.status_code != 200:
                     return ScrapeResult(
                         success=False,
                         url=url,
-                        error=f"API error: {response.status_code}"
+                        error=f"API error: {response.status_code} - {response.text}"
                     )
 
                 data = response.json()
@@ -110,222 +395,61 @@ class FirecrawlClient:
                 )
 
         except Exception as e:
-            return ScrapeResult(
-                success=False,
-                url=url,
-                error=str(e)
-            )
+            return ScrapeResult(success=False, url=url, error=str(e))
 
-    async def scrape_urls_batch(self, urls: List[str], concurrency: int = 5) -> List[ScrapeResult]:
-        """
-        Scrape multiple URLs with concurrency control.
-        """
+    async def scrape_urls_batch(
+        self,
+        urls: List[str],
+        concurrency: int = 5,
+    ) -> List[ScrapeResult]:
+        """Scrape multiple URLs with concurrency control"""
         semaphore = asyncio.Semaphore(concurrency)
 
         async def scrape_with_semaphore(url: str) -> ScrapeResult:
             async with semaphore:
                 result = await self.scrape_url(url)
-                # Add small delay to avoid rate limiting
                 await asyncio.sleep(0.5)
                 return result
 
         tasks = [scrape_with_semaphore(url) for url in urls]
         return await asyncio.gather(*tasks)
 
+    # ---------------------------------------------------------------
+    # MOCK implementations
+    # ---------------------------------------------------------------
     def _mock_map_domain(self, url: str) -> MapResult:
         """Return mock data for testing"""
         from urllib.parse import urlparse
-
         parsed = urlparse(url)
         domain = parsed.netloc
 
-        # Generate mock URLs based on domain
         mock_urls = [
             f"https://{domain}/",
-            f"https://{domain}/admissions",
             f"https://{domain}/admissions/graduate",
-            f"https://{domain}/admissions/graduate/programs",
-            f"https://{domain}/admissions/graduate/requirements",
-            f"https://{domain}/admissions/graduate/deadlines",
-            f"https://{domain}/programs/masters",
             f"https://{domain}/programs/masters/computer-science",
             f"https://{domain}/programs/masters/data-science",
-            f"https://{domain}/programs/masters/artificial-intelligence",
             f"https://{domain}/programs/phd",
-            f"https://{domain}/financial-aid",
             f"https://{domain}/financial-aid/scholarships",
-            f"https://{domain}/financial-aid/fellowships",
-            f"https://{domain}/international",
             f"https://{domain}/international/exchange-programs",
-            f"https://{domain}/research",
-            f"https://{domain}/faculty",
-            f"https://{domain}/news",
-            f"https://{domain}/events",
-            f"https://{domain}/about",
-            f"https://{domain}/contact",
-            f"https://{domain}/login",
         ]
-
         return MapResult(success=True, urls=mock_urls)
 
     def _mock_scrape_url(self, url: str) -> ScrapeResult:
         """Return mock content for testing"""
-
-        # Generate different content based on URL pattern
-        if "computer-science" in url:
-            content = """
-# Master of Science in Computer Science
+        content = f"""
+# Sample Program Page
 
 ## Program Overview
-The MS in Computer Science program prepares students for careers in software development, research, and technology leadership.
+This is a sample program from {url}.
 
-## Requirements
-- Bachelor's degree in Computer Science or related field
-- Minimum GPA: 3.0
-- GRE scores (optional for 2024)
-- TOEFL: 90+ or IELTS: 7.0+
+## Key Information
+- Name: Sample Graduate Program
+- Country: United States
+- Summary: A comprehensive graduate program.
 
-## Duration
-2 years (4 semesters) full-time
-
-## Tuition
-$55,000 per year for domestic students
-$65,000 per year for international students
-
-## Application Deadlines
-- Fall admission: January 15
-- Spring admission: September 1
-
-## Curriculum
-Core courses include:
-- Advanced Algorithms
-- Machine Learning
-- Distributed Systems
-- Software Engineering
-
-## Financial Aid
-Teaching and Research assistantships available.
-Merit-based scholarships for exceptional candidates.
-
-[Apply Now](https://example.edu/apply)
+## Apply Now
+Visit the website for more information.
 """
-        elif "scholarship" in url:
-            content = """
-# Graduate Scholarships
-
-## Merit Scholarship
-- Amount: $20,000 per year
-- Duration: 2 years
-- Eligibility: GPA 3.5+, strong research potential
-- Deadline: February 1
-
-## International Student Award
-- Amount: $15,000 per year
-- Eligibility: International students with demonstrated need
-- Covers: Partial tuition
-- Deadline: March 15
-
-## Research Fellowship
-- Amount: Full tuition + $30,000 stipend
-- Duration: 4 years (PhD students)
-- Requirements: Research proposal, faculty recommendation
-- Deadline: December 15
-
-## Application Process
-1. Submit online application
-2. Provide transcripts
-3. Submit statement of purpose
-4. Two letters of recommendation
-
-[Apply for Scholarships](https://example.edu/financial-aid/apply)
-"""
-        elif "exchange" in url:
-            content = """
-# International Exchange Programs
-
-## Erasmus+ Partnership
-- Partner universities in 15 European countries
-- Duration: 1-2 semesters
-- Benefits: Tuition waiver at host institution, travel grant
-- Eligibility: GPA 3.0+, completed 2 semesters
-
-## Bilateral Exchange - Asia
-- Partners: University of Tokyo, NUS Singapore, Tsinghua
-- Duration: 1 semester
-- Language: English-taught programs available
-- Deadline: October 1 for Spring, March 1 for Fall
-
-## Summer Programs
-- Duration: 6-8 weeks
-- Locations: UK, Germany, Australia
-- Credits: 6-9 transferable credits
-- Cost: $5,000-8,000 (includes housing)
-
-## Application Requirements
-- Current enrollment in good standing
-- Personal statement
-- Faculty recommendation
-- Language proficiency (if applicable)
-
-[Explore Programs](https://example.edu/international/programs)
-"""
-        elif "conference" in url or "events" in url:
-            content = """
-# Academic Conferences
-
-## International Conference on Machine Learning (ICML 2025)
-- Dates: July 15-20, 2025
-- Location: Vienna, Austria
-- Submission Deadline: February 1, 2025
-- Registration Fee: $800 (students: $400)
-- Topics: Deep Learning, Reinforcement Learning, NLP
-
-## ACM SIGCHI Conference 2025
-- Dates: April 25-30, 2025
-- Location: San Francisco, CA
-- Paper Deadline: September 15, 2024
-- Registration: $650
-- Focus: Human-Computer Interaction
-
-## IEEE Data Science Conference
-- Dates: October 10-12, 2025
-- Location: Virtual + Singapore
-- Abstract Deadline: May 1, 2025
-- Student Registration: $200
-
-[View All Conferences](https://example.edu/research/conferences)
-"""
-        else:
-            content = """
-# Graduate Programs
-
-Welcome to our Graduate School. We offer world-class programs in:
-
-- Computer Science
-- Data Science
-- Artificial Intelligence
-- Business Administration
-- Engineering
-
-## Why Choose Us?
-- Top 50 globally ranked
-- Industry partnerships
-- Research opportunities
-- Career support
-
-## Quick Links
-- [Admissions](https://example.edu/admissions)
-- [Programs](https://example.edu/programs)
-- [Financial Aid](https://example.edu/financial-aid)
-- [Contact](https://example.edu/contact)
-
-## Upcoming Deadlines
-- Fall 2025: January 15, 2025
-- Spring 2025: September 1, 2024
-
-Visit our campus or join a virtual info session!
-"""
-
         return ScrapeResult(
             success=True,
             url=url,
