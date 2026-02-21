@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     APP_NAME: str = "Data Portal"
     DEBUG: bool = False
 
+    # CORS - comma-separated list of allowed origins
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:3001"
+
     # Database
     DATABASE_URL: str = "postgresql://dataportal:dataportal123@localhost:5432/dataportal"
     CLOUD_SQL_CONNECTION_NAME: Optional[str] = None  # For Cloud Run: project:region:instance
