@@ -8,9 +8,9 @@ on:
 
 env:
   PROJECT_ID: uniapply-486919
-  REGION: me-central1
-  REGISTRY: me-central1-docker.pkg.dev
-  REPO: data-portal
+  REGION: europe-west1
+  REGISTRY: europe-west1-docker.pkg.dev
+  REPO: uniapply-repo
 
 jobs:
   # ─── Detect which parts of the repo changed ───────────────────────────────
@@ -70,9 +70,7 @@ jobs:
             DATABASE_URL=${{ secrets.DATABASE_URL }}
             SECRET_KEY=${{ secrets.SECRET_KEY }}
             ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }}
-            ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             DEFAULT_AI_PROVIDER=gemini
             DEFAULT_AI_MODEL=gemini-2.0-flash
             GCP_PROJECT_ID=${{ env.PROJECT_ID }}
