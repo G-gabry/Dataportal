@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - deployment
 
 env:
   PROJECT_ID: uniapply-486919
