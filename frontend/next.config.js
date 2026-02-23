@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-// Data Portal - Production Build
+// Data Portal - Production Build v2
 const nextConfig = {
   output: 'standalone',
   eslint: {
