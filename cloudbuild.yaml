@@ -33,12 +33,11 @@ steps:
       - --port=8080
       - --memory=1Gi
       - --cpu=1
-      - --set-env-vars=DATABASE_URL=$$DATABASE_URL,SECRET_KEY=$$SECRET_KEY,GEMINI_API_KEY=$$GEMINI_API_KEY,FIRECRAWL_VM_IP=$$FIRECRAWL_VM_IP,ALLOWED_ORIGINS=$$ALLOWED_ORIGINS,GCP_PROJECT_ID=$PROJECT_ID
+      - --set-env-vars=DATABASE_URL=$$DATABASE_URL,SECRET_KEY=$$SECRET_KEY,GEMINI_API_KEY=$$GEMINI_API_KEY,ALLOWED_ORIGINS=$$ALLOWED_ORIGINS,GCP_PROJECT_ID=$PROJECT_ID,GCP_ZONE=me-central1-b,FIRECRAWL_VM_NAME=firecrawl
     secretEnv:
       - DATABASE_URL
       - SECRET_KEY
       - GEMINI_API_KEY
-      - FIRECRAWL_VM_IP
       - ALLOWED_ORIGINS
 
   # ─── FRONTEND ──────────────────────────────────────────────
@@ -92,8 +91,6 @@ availableSecrets:
       env: SECRET_KEY
     - versionName: projects/$PROJECT_ID/secrets/GEMINI_API_KEY/versions/latest
       env: GEMINI_API_KEY
-    - versionName: projects/$PROJECT_ID/secrets/FIRECRAWL_VM_IP/versions/latest
-      env: FIRECRAWL_VM_IP
     - versionName: projects/$PROJECT_ID/secrets/ALLOWED_ORIGINS/versions/latest
       env: ALLOWED_ORIGINS
     - versionName: projects/$PROJECT_ID/secrets/NEXT_PUBLIC_API_URL/versions/latest
