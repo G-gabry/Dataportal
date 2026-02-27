@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - deployment
+      - dynamic-vm-ip-auto-deploy
 
 env:
   PROJECT_ID: uniapply-486919
@@ -36,7 +37,7 @@ jobs:
   # ─── Deploy Backend ────────────────────────────────────────────────────────
   deploy-backend:
     needs: detect-changes
-    if: needs.detect-changes.outputs.backend == 'true'
+    if: needs.detect-changes.outputs.backend == 'true' || github.ref == 'refs/heads/dynamic-vm-ip-auto-deploy'
     runs-on: ubuntu-latest
 
     steps:
@@ -76,13 +77,11 @@ jobs:
             GCP_PROJECT_ID=${{ env.PROJECT_ID }}
             GCP_ZONE=me-central1-b
             FIRECRAWL_VM_NAME=firecrawl
-            FIRECRAWL_VM_IP=${{ secrets.FIRECRAWL_VM_IP }}
-            FIRECRAWL_BASE_URL=http://${{ secrets.FIRECRAWL_VM_IP }}:3002
 
   # ─── Deploy Frontend ───────────────────────────────────────────────────────
   deploy-frontend:
     needs: detect-changes
-    if: needs.detect-changes.outputs.frontend == 'true'
+    if: needs.detect-changes.outputs.frontend == 'true' || github.ref == 'refs/heads/dynamic-vm-ip-auto-deploy'
     runs-on: ubuntu-latest
 
     steps:
