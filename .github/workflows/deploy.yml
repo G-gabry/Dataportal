@@ -66,7 +66,7 @@ jobs:
           service: data-portal-backend
           region: ${{ env.REGION }}
           image: ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/backend:${{ github.sha }}
-          flags: --allow-unauthenticated --memory=512Mi --cpu=1 --min-instances=0 --max-instances=3 --add-cloudsql-instances=uniapply-486919:me-central1:data-portal-db
+          flags: --allow-unauthenticated --memory=1Gi --cpu=1 --min-instances=1 --max-instances=3 --no-cpu-throttling --timeout=3600 --add-cloudsql-instances=uniapply-486919:me-central1:data-portal-db
           env_vars: |
             DATABASE_URL=${{ secrets.DATABASE_URL }}
             SECRET_KEY=${{ secrets.SECRET_KEY }}
