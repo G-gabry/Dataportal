@@ -36,8 +36,8 @@ services:
       - FIRECRAWL_BASE_URL=${FIRECRAWL_BASE_URL:-http://localhost:3002}
       - FIRECRAWL_VM_IP=${FIRECRAWL_VM_IP}
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-uniapply-486919}
-      - GCP_ZONE=${GCP_ZONE:-me-central1-b}
-      - FIRECRAWL_VM_NAME=${FIRECRAWL_VM_NAME:-firecrawl}
+      - GCP_ZONE=${GCP_ZONE:-me-central1-a}
+      - FIRECRAWL_VM_NAME=${FIRECRAWL_VM_NAME:-firecrawlimage-20260219-191632}
       - DEFAULT_AI_PROVIDER=${DEFAULT_AI_PROVIDER:-gemini}
       - DEFAULT_AI_MODEL=${DEFAULT_AI_MODEL:-gemini-2.0-flash}
       - GOOGLE_APPLICATION_CREDENTIALS=/gcp/application_default_credentials.json

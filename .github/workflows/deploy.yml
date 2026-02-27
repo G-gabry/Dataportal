@@ -75,8 +75,8 @@ jobs:
             DEFAULT_AI_PROVIDER=gemini
             DEFAULT_AI_MODEL=gemini-2.0-flash
             GCP_PROJECT_ID=${{ env.PROJECT_ID }}
-            GCP_ZONE=me-central1-b
-            FIRECRAWL_VM_NAME=firecrawl
+            GCP_ZONE=me-central1-a
+            FIRECRAWL_VM_NAME=firecrawlimage-20260219-191632
 
   # ─── Deploy Frontend ───────────────────────────────────────────────────────
   deploy-frontend:
