@@ -173,11 +173,17 @@ class ScrapePipeline:
         """Crawl the entire site using Firecrawl VM crawl endpoint"""
         print(f"[Scrape] Starting crawl of {self.source.base_url}")
 
+        include_paths = list(self.source.include_patterns) if self.source.include_patterns else None
+        exclude_paths = list(self.source.exclude_patterns) if self.source.exclude_patterns else None
+
         # Start the crawl job
         crawl_result = await self.firecrawl.start_crawl(
             url=self.source.base_url,
-            limit=15,  # Limit pages per crawl
-            wait_for=10000,
+            limit=500,
+            max_depth=7,
+            wait_for=5000,
+            include_paths=include_paths,
+            exclude_paths=exclude_paths,
         )
 
         self.job.firecrawl_calls += 1
@@ -275,11 +281,9 @@ class ScrapePipeline:
 
     async def _extract_data(self, pages: List[ScrapeResult]):
         """
-        Combine ALL crawled pages into one JSON input → AI extracts ONE item per source.
-        - name  = source.name  (not from AI)
-        - url   = source.base_url  (not from AI)
-        - AI extracts: country, summary
-        - AI input stored in custom_fields.ai_input for admin inspection
+        Process pages in batches of 5. Each batch → AI extracts ALL items found.
+        Supports multiple items per page (listing sites like mastersportal, findamasters).
+        Deduplicates by item URL to avoid duplicates across batches.
         """
         ai_provider = get_ai_provider(self.db, TaskType.EXTRACTION)
 
@@ -288,68 +292,69 @@ class ScrapePipeline:
             for t in self.source.target_item_types
         ]
 
-        # Build combined JSON: {url: content} for ALL pages
-        content_json: Dict[str, str] = {}
-        for page in pages:
-            if page.markdown:
-                content_json[page.url] = page.markdown[:2000]  # limit per page
+        # Track URLs already saved in this job to avoid duplicates
+        seen_urls: set = set()
 
-        if not content_json:
-            print(f"[Scrape] No content to extract from")
-            return
+        # Load URLs of existing items for this source to avoid re-saving unchanged ones
+        existing_items = self.db.query(Item).filter(Item.source_id == self.source.id).all()
+        existing_by_url: Dict[str, Item] = {}
+        for ei in existing_items:
+            url = (ei.data or {}).get("url", "")
+            if url:
+                existing_by_url[url] = ei
 
-        print(f"[Scrape] Sending {len(content_json)} pages to AI for source: {self.source.name}")
-        await self._update_step("Extracting data (50%)", 50)
+        # Process in batches of 5 pages
+        BATCH_SIZE = 5
+        batches = [pages[i:i + BATCH_SIZE] for i in range(0, len(pages), BATCH_SIZE)]
+        total_batches = len(batches)
 
-        for item_type in target_types:
-            schema = self.db.query(ItemSchema).filter(
-                ItemSchema.item_type == item_type,
-                ItemSchema.is_active == True
-            ).first()
+        print(f"[Scrape] Extracting from {len(pages)} pages in {total_batches} batches")
 
-            if not schema:
+        for batch_idx, batch in enumerate(batches):
+            progress = 50 + int(45 * batch_idx / max(total_batches, 1))
+            await self._update_step(
+                f"Extracting batch {batch_idx + 1}/{total_batches}", progress
+            )
+
+            batch_content: Dict[str, str] = {}
+            for page in batch:
+                if page.markdown:
+                    batch_content[page.url] = page.markdown[:3000]
+
+            if not batch_content:
                 continue
 
-            extracted = await self._extract_from_source(content_json, item_type, ai_provider)
+            for item_type in target_types:
+                items_data = await self._extract_items_from_batch(
+                    batch_content, item_type, ai_provider
+                )
 
-            if extracted:
-                # Name and URL always come from source, not AI
-                item_data = {
-                    "name": self.source.name,
-                    "url": self.source.base_url,
-                    "country": extracted.get("country"),
-                    "summary": extracted.get("summary"),
-                }
+                for item_data in items_data:
+                    item_url = item_data.get("url", "").rstrip("/")
+                    if not item_url or item_url in seen_urls:
+                        continue
+                    seen_urls.add(item_url)
 
-                # Check if item already exists for this source
-                existing = self.db.query(Item).filter(
-                    Item.source_id == self.source.id,
-                    Item.item_type == item_type
-                ).first()
+                    if item_url in existing_by_url:
+                        # Update existing item
+                        existing_by_url[item_url].data = item_data
+                        existing_by_url[item_url].extraction_confidence = 85
+                        existing_by_url[item_url].extracted_at = datetime.now(timezone.utc)
+                    else:
+                        item = Item(
+                            source_id=self.source.id,
+                            item_type=item_type,
+                            data=item_data,
+                            extraction_confidence=85,
+                            status=ItemStatus.DRAFT,
+                            extracted_at=datetime.now(timezone.utc),
+                        )
+                        self.db.add(item)
+                        self.job.items_extracted += 1
 
-                if existing:
-                    # Update existing item
-                    existing.data = item_data
-                    existing.custom_fields = {"ai_input": content_json}
-                    existing.extraction_confidence = 80
-                    existing.extracted_at = datetime.now(timezone.utc)
-                    print(f"[Scrape] Updated item: {self.source.name}")
-                else:
-                    # Create new item
-                    item = Item(
-                        source_id=self.source.id,
-                        item_type=item_type,
-                        data=item_data,
-                        custom_fields={"ai_input": content_json},
-                        extraction_confidence=80,
-                        status=ItemStatus.DRAFT,
-                        extracted_at=datetime.now(timezone.utc),
-                    )
-                    self.db.add(item)
-                    self.job.items_extracted += 1
-                    print(f"[Scrape] Created item: {self.source.name}")
+            self.db.commit()
 
-        # Mark all discovered URLs as extracted
+        # Mark all pages as extracted
         for page in pages:
             disc = self.db.query(DiscoveredURL).filter(
                 DiscoveredURL.source_id == self.source.id,
@@ -359,42 +364,51 @@ class ScrapePipeline:
                 disc.status = URLStatus.EXTRACTED
 
         self.db.commit()
+        print(f"[Scrape] Extraction complete. Total items: {self.job.items_extracted}")
 
-    async def _extract_from_source(
+    async def _extract_items_from_batch(
         self,
-        content_json: Dict[str, str],
+        batch_content: Dict[str, str],
         item_type: ItemType,
-        ai_provider
-    ) -> Optional[Dict[str, Any]]:
+        ai_provider,
+    ) -> List[Dict[str, Any]]:
         """
-        Send all pages from a source to AI and extract ONE item.
-        Input:  {url: page_content, sub_url: page_content, ...} for all crawled pages
-        Output: {country, summary}
+        Send a batch of pages to Gemini and extract ALL items found.
+        Returns a list of item dicts (can be empty if nothing found).
         """
         type_name = item_type.value.lower()
 
-        prompt = f"""You are extracting information about an organization called "{self.source.name}" that offers {type_name}s.
+        prompt = f"""You are extracting {type_name} opportunities from web pages.
 
-Below is a JSON where each key is a page URL and its value is the page content from their website ({self.source.base_url}).
-Analyze ALL pages together and extract:
+Pages from {self.source.base_url}:
+{json.dumps(batch_content, ensure_ascii=False)[:14000]}
 
-- country: The country where this organization is based or primarily operates
-- summary: A 2-3 sentence description of what this organization offers (focus on {type_name}s)
+Extract ALL {type_name} opportunities found across these pages.
+For each one return:
+- name: Full name of the {type_name}
+- url: Direct URL (use the page URL if no specific URL is given)
+- country: Country where it is based or offered
+- summary: 2-3 sentences describing it
+- deadline: Application deadline if mentioned, else null
+- funding: Funding amount or type if mentioned, else null
 
-Input pages:
-{json.dumps(content_json, ensure_ascii=False)[:12000]}
-
-Return ONLY this JSON, no other text:
-{{
-  "country": "...",
-  "summary": "..."
-}}"""
+Return ONLY a JSON array, no other text. If nothing found return [].
+[
+  {{
+    "name": "...",
+    "url": "...",
+    "country": "...",
+    "summary": "...",
+    "deadline": null,
+    "funding": null
+  }}
+]"""
 
         try:
             result = await ai_provider.generate_json(prompt)
 
             ai_log = AILog(
-                task_type="EXTRACT_SOURCE",
+                task_type="EXTRACT_BATCH",
                 model_used=ai_provider.model,
                 provider=ai_provider.provider_name,
                 job_id=self.job.id,
@@ -404,9 +418,19 @@ Return ONLY this JSON, no other text:
             )
             self.db.add(ai_log)
 
-            print(f"[Scrape] AI extracted for {self.source.name}: {result.parsed_json}, error={result.error}")
-            return result.parsed_json
+            # Result may be a list or a dict with a list inside
+            parsed = result.parsed_json
+            if isinstance(parsed, list):
+                print(f"[Scrape] Batch extracted {len(parsed)} {type_name}(s)")
+                return parsed
+            if isinstance(parsed, dict):
+                # Sometimes AI wraps in {"items": [...]}
+                for key in ("items", "results", "data", type_name + "s"):
+                    if isinstance(parsed.get(key), list):
+                        return parsed[key]
+
+            return []
 
         except Exception as e:
-            print(f"[Scrape] Extraction error: {e}")
-            return None
+            print(f"[Scrape] Batch extraction error: {e}")
+            return []
