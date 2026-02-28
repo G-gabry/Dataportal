@@ -99,6 +99,9 @@ class FirecrawlClient:
         url: str,
         limit: int = 100,
         wait_for: int = 10000,
+        max_depth: int = 7,
+        include_paths: List[str] = None,
+        exclude_paths: List[str] = None,
         scrape_options: Dict[str, Any] = None,
     ) -> CrawlResult:
         """
@@ -108,6 +111,9 @@ class FirecrawlClient:
             url: The URL to start crawling from
             limit: Maximum number of pages to crawl
             wait_for: Time to wait for page load in ms
+            max_depth: Maximum crawl depth from start URL
+            include_paths: URL path patterns to include (e.g. ["/scholarship/", "/master/"])
+            exclude_paths: URL path patterns to exclude (e.g. ["/login", "/cart"])
             scrape_options: Additional scrape options
 
         Returns:
@@ -123,11 +129,17 @@ class FirecrawlClient:
         payload = {
             "url": url,
             "limit": limit,
+            "maxDepth": max_depth,
             "scrapeOptions": scrape_options or {
                 "formats": ["markdown"],
                 "waitFor": wait_for,
             },
         }
+
+        if include_paths:
+            payload["includePaths"] = include_paths
+        if exclude_paths:
+            payload["excludePaths"] = exclude_paths
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:

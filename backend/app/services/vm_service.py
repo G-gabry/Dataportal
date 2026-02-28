@@ -104,7 +104,7 @@ class VMService:
         This allows manual override when GCP API isn't available.
         """
         import os
-        fallback = os.environ.get("FIRECRAWL_VM_IP", "34.18.217.163")
+        fallback = os.environ.get("FIRECRAWL_VM_IP", "34.18.150.190")
         print(f"[VMService] Using fallback IP: {fallback}")
         return fallback
 

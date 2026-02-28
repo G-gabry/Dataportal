@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - deployment
+      - dynamic-vm-ip-auto-deploy
 
 env:
   PROJECT_ID: uniapply-486919
@@ -36,7 +37,7 @@ jobs:
   # ─── Deploy Backend ────────────────────────────────────────────────────────
   deploy-backend:
     needs: detect-changes
-    if: needs.detect-changes.outputs.backend == 'true'
+    if: needs.detect-changes.outputs.backend == 'true' || github.ref == 'refs/heads/dynamic-vm-ip-auto-deploy'
     runs-on: ubuntu-latest
 
     steps:
@@ -65,7 +66,7 @@ jobs:
           service: data-portal-backend
           region: ${{ env.REGION }}
           image: ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/backend:${{ github.sha }}
-          flags: --allow-unauthenticated --memory=512Mi --cpu=1 --min-instances=0 --max-instances=3 --add-cloudsql-instances=uniapply-486919:me-central1:data-portal-db
+          flags: --allow-unauthenticated --memory=1Gi --cpu=1 --min-instances=1 --max-instances=3 --no-cpu-throttling --timeout=3600 --add-cloudsql-instances=uniapply-486919:me-central1:data-portal-db --remove-env-vars=FIRECRAWL_VM_IP,FIRECRAWL_BASE_URL
           env_vars: |
             DATABASE_URL=${{ secrets.DATABASE_URL }}
             SECRET_KEY=${{ secrets.SECRET_KEY }}
@@ -74,15 +75,13 @@ jobs:
             DEFAULT_AI_PROVIDER=gemini
             DEFAULT_AI_MODEL=gemini-2.0-flash
             GCP_PROJECT_ID=${{ env.PROJECT_ID }}
-            GCP_ZONE=me-central1-b
-            FIRECRAWL_VM_NAME=firecrawl
-            FIRECRAWL_VM_IP=${{ secrets.FIRECRAWL_VM_IP }}
-            FIRECRAWL_BASE_URL=http://${{ secrets.FIRECRAWL_VM_IP }}:3002
+            GCP_ZONE=me-central1-a
+            FIRECRAWL_VM_NAME=firecrawlimage-20260219-191632
 
   # ─── Deploy Frontend ───────────────────────────────────────────────────────
   deploy-frontend:
     needs: detect-changes
-    if: needs.detect-changes.outputs.frontend == 'true'
+    if: needs.detect-changes.outputs.frontend == 'true' || github.ref == 'refs/heads/dynamic-vm-ip-auto-deploy'
     runs-on: ubuntu-latest
 
     steps:
