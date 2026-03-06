@@ -1,0 +1,31 @@
+# Scholarship Pipeline Requirements
+
+# Crawl4AI — native package for VM execution (AsyncWebCrawler + DFS)
+crawl4ai>=0.4.24
+
+# HTTP / async (still used by step1 Firecrawl calls)
+httpx>=0.27.0
+aiofiles>=23.2.1
+
+# AI
+google-generativeai>=0.8.0
+
+# HTML / Sitemap parsing
+lxml>=5.2.0
+beautifulsoup4>=4.12.3
+
+# Fuzzy matching (dedup)
+thefuzz>=0.22.1
+python-Levenshtein>=0.25.1   # speeds up thefuzz significantly
+
+# Date parsing (normalization)
+python-dateutil>=2.9.0
+
+# Environment
+python-dotenv>=1.0.1
+
+# Progress DB
+# (uses stdlib sqlite3 — no extra package needed)
+
+# CSV
+# (uses stdlib csv — no extra package needed)
