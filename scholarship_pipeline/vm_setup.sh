@@ -5,11 +5,12 @@ set -e
 
 echo "=== Setting up Scholarship Pipeline on VM ==="
 
-cd ~/scholarship_pipeline 2>/dev/null || {
-    echo "ERROR: ~/scholarship_pipeline directory not found."
-    echo "Please sync the code first (see README step 1)."
+# We assume the user is already in the scholarship_pipeline directory when running this script
+if [ ! -f "requirements.txt" ]; then
+    echo "ERROR: Please run this script from inside the scholarship_pipeline directory."
     exit 1
-}
+fi
+
 
 # Create venv if it doesn't exist
 if [ ! -d "venv" ]; then
