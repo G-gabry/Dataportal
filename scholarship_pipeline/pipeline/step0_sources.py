@@ -78,7 +78,7 @@ async def load_sources(skip_api: bool = False) -> List[SourceConfig]:
 
     if not sources and SOURCES_CACHE_FILE.exists():
         try:
-            cached = json.loads(SOURCES_CACHE_FILE.read_text(encoding="utf-8"))
+            cached = json.loads(SOURCES_CACHE_FILE.read_text(encoding="utf-8-sig"))
             sources = cached.get("items", [])
             log.warning(f"Using cached sources ({len(sources)} entries). Portal API may be down.")
         except Exception as e:
