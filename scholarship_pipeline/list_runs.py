@@ -7,28 +7,29 @@ if not os.path.exists(db):
 else:
     conn = sqlite3.connect(db)
     
-    # Check what tables exist
-    tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
-    print("Tables:", tables)
-    
-    # Get all runs with stats
-    try:
-        rows = conn.execute("""
-            SELECT r.run_id, r.started_at, COALESCE(r.finished_at, 'RUNNING'),
-                   COUNT(DISTINCT CASE WHEN u.crawl_status = 'done' THEN u.url END),
-                   COUNT(DISTINCT CASE WHEN i.id IS NOT NULL THEN i.id END)
-            FROM runs r
-            LEFT JOIN urls u ON r.run_id = u.run_id
-            LEFT JOIN items i ON r.run_id = i.run_id
-            GROUP BY r.run_id
-            ORDER BY r.started_at DESC
-        """).fetchall()
-    except Exception:
-        rows = conn.execute("SELECT run_id, started_at, finished_at FROM runs ORDER BY started_at DESC").fetchall()
-    
-    print("\n{:<22} {:<22} {:<12}".format("Run ID", "Started", "Status"))
-    print("-" * 70)
+    rows = conn.execute("""
+        SELECT 
+            r.run_id, 
+            r.started_at,
+            CASE WHEN r.finished_at IS NULL THEN 'RUNNING' ELSE 'DONE' END as status,
+            COALESCE(m.total_discovered, 0) as discovered,
+            COALESCE(m.total_crawled, 0) as crawled,
+            COALESCE(m.total_extracted, 0) as extracted,
+            COALESCE(m.total_final, 0) as final
+        FROM runs r
+        LEFT JOIN run_meta m ON r.run_id = m.run_id
+        ORDER BY r.started_at DESC
+    """).fetchall()
+
+    header = "{:<22} {:<21} {:<9} {:>10} {:>8} {:>10} {:>7}".format(
+        "Run ID", "Started", "Status", "Discovered", "Crawled", "Extracted", "Final"
+    )
+    print(header)
+    print("-" * 90)
     for row in rows:
-        print("{:<22} {:<22} {:<12}".format(str(row[0]), str(row[1])[:20], str(row[2])[:12]))
-    
+        print("{:<22} {:<21} {:<9} {:>10} {:>8} {:>10} {:>7}".format(
+            str(row[0]), str(row[1])[:20], str(row[2]),
+            row[3], row[4], row[5], row[6]
+        ))
+
     conn.close()
