@@ -1,0 +1,40 @@
+=== /crawl endpoint ===
+{
+  "post": {
+    "summary": "Crawl",
+    "description": "Crawl a list of URLs and return the results as JSON.\nFor streaming responses, use /crawl/stream endpoint.\nSupports optional user-provided hook functions for customization.",
+    "operationId": "crawl_crawl_post",
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/CrawlRequestWithHooks"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {}
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+=== CrawlRequest ===

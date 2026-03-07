@@ -1,25 +1,25 @@
 version: '3.8'
 
+# ── Database ──────────────────────────────────────────────────────────────────
+# Uses Google Cloud SQL Auth Proxy — bypasses IP whitelists.
+# The proxy securely tunnels port 5432 to your GCP Cloud SQL instance using
+# your local gcloud credentials.
+
 services:
-  db:
-    image: postgres:15-alpine
-    container_name: data-portal-db
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-dataportal}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dataportal123}
-      POSTGRES_DB: ${POSTGRES_DB:-dataportal}
+  # ── Cloud SQL Auth Proxy ────────────────────────────────────────────────────
+  cloud-sql-proxy:
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.8.0
+    container_name: cloud-sql-proxy
+    command:
+      - "--address=0.0.0.0"
+      - "--port=5432"
+      - "uniapply-486919:me-central1:data-portal-db"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
-    ports:
-      - "5432:5432"
+      - ${APPDATA}/gcloud:/gcp:ro
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/gcp/application_default_credentials.json
     networks:
       - app_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dataportal}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   backend:
     build:
@@ -27,23 +27,24 @@ services:
       dockerfile: Dockerfile
     container_name: data-portal-backend
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+      # Connect to the local Auth Proxy container instead of public IP
+      - DATABASE_URL=postgresql://dataportal:${POSTGRES_PASSWORD:-DataPortal2024}@cloud-sql-proxy:5432/data_portal
+      - SECRET_KEY=${SECRET_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
-      - FIRECRAWL_BASE_URL=${FIRECRAWL_BASE_URL:-http://localhost:3002}
+      - FIRECRAWL_BASE_URL=${FIRECRAWL_BASE_URL}
       - FIRECRAWL_VM_IP=${FIRECRAWL_VM_IP}
-      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-uniapply-486919}
-      - GCP_ZONE=${GCP_ZONE:-me-central1-a}
-      - FIRECRAWL_VM_NAME=${FIRECRAWL_VM_NAME:-firecrawlimage-20260219-191632}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - GCP_ZONE=${GCP_ZONE}
+      - FIRECRAWL_VM_NAME=${FIRECRAWL_VM_NAME}
       - DEFAULT_AI_PROVIDER=${DEFAULT_AI_PROVIDER:-gemini}
       - DEFAULT_AI_MODEL=${DEFAULT_AI_MODEL:-gemini-2.0-flash}
       - GOOGLE_APPLICATION_CREDENTIALS=/gcp/application_default_credentials.json
     volumes:
       - ./backend:/app
-      - ${APPDATA}/gcloud:/gcp:ro
+      - ${APPDATA}/gcloud:/gcp:ro # GCP credentials for Cloud SQL auth
     ports:
       - "8001:8000"
     networks:
@@ -66,9 +67,6 @@ services:
       - backend
     networks:
       - app_network
-
-volumes:
-  postgres_data:
 
 networks:
   app_network:

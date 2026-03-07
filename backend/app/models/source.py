@@ -22,7 +22,10 @@ class Source(Base, UUIDMixin, TimestampMixin):
     is_important = Column(Boolean, default=False, index=True)
     is_active = Column(Boolean, default=True, index=True)
 
-    # URL filtering patterns
+    # URL filtering patterns and crawl logic
+    sitemap_url = Column(String(500), nullable=True)
+    dfs_depth = Column(Integer, default=1)
+    max_urls_per_run = Column(Integer, nullable=True)
     include_patterns = Column(ARRAY(Text), default=[])
     exclude_patterns = Column(ARRAY(Text), default=[])
 

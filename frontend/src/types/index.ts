@@ -31,6 +31,9 @@ export interface Source {
   is_active: boolean;
   include_patterns: string[];
   exclude_patterns: string[];
+  sitemap_url: string | null;
+  dfs_depth: number;
+  max_urls_per_run: number | null;
   metadata: Record<string, any>;
   notes: string | null;
   last_scraped_at: string | null;

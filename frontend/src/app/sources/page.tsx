@@ -11,7 +11,7 @@ import Select from '@/components/ui/Select';
 import Modal from '@/components/ui/Modal';
 import Badge from '@/components/ui/Badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table';
-import { sources } from '@/lib/api';
+import { sources, jobs } from '@/lib/api';
 import { formatDateTime, getSourceTypeLabel, truncate } from '@/lib/utils';
 import type { Source, SourceType, ItemType } from '@/types';
 import { Plus, Play, Edit, Trash2, Star, ExternalLink } from 'lucide-react';
@@ -37,12 +37,17 @@ export default function SourcesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<Source | null>(null);
 
-  // Form state
   const [formData, setFormData] = useState({
     name: '',
     type: 'UNIVERSITY' as SourceType,
     base_url: '',
+    sitemap_url: '',
+    dfs_depth: 1,
+    max_urls_per_run: '',
+    scrape_frequency: 'MONTHLY',
     target_item_types: ['PROGRAM'] as ItemType[],
+    include_patterns: '',
+    exclude_patterns: '',
     is_important: false,
     notes: '',
   });
@@ -51,6 +56,18 @@ export default function SourcesPage() {
     queryKey: ['sources', search],
     queryFn: () => sources.list({ search, page_size: 100 }),
   });
+
+  const { data: jobsData } = useQuery({
+    queryKey: ['jobs'],
+    queryFn: () => jobs.list({ page_size: 100 }),
+    refetchInterval: 10000,
+  });
+
+  // Helper to get the latest job for a source
+  const getLatestJob = (sourceId: string) => {
+    if (!jobsData?.items) return null;
+    return jobsData.items.find(job => job.source_id === sourceId) || null;
+  };
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<Source>) => sources.create(data),
@@ -105,7 +122,13 @@ export default function SourcesPage() {
       name: '',
       type: 'UNIVERSITY',
       base_url: '',
+      sitemap_url: '',
+      dfs_depth: 1,
+      max_urls_per_run: '',
+      scrape_frequency: 'MONTHLY',
       target_item_types: ['PROGRAM'],
+      include_patterns: '',
+      exclude_patterns: '',
       is_important: false,
       notes: '',
     });
@@ -118,7 +141,13 @@ export default function SourcesPage() {
       name: source.name,
       type: source.type,
       base_url: source.base_url,
+      sitemap_url: source.sitemap_url || '',
+      dfs_depth: source.dfs_depth || 1,
+      max_urls_per_run: source.max_urls_per_run ? String(source.max_urls_per_run) : '',
+      scrape_frequency: source.scrape_frequency || 'MONTHLY',
       target_item_types: source.target_item_types,
+      include_patterns: source.include_patterns?.join(', ') || '',
+      exclude_patterns: source.exclude_patterns?.join(', ') || '',
       is_important: source.is_important,
       notes: source.notes || '',
     });
@@ -132,10 +161,20 @@ export default function SourcesPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const payload = {
+      ...formData,
+      sitemap_url: formData.sitemap_url.trim() || null,
+      dfs_depth: Number(formData.dfs_depth),
+      max_urls_per_run: formData.max_urls_per_run ? Number(formData.max_urls_per_run) : null,
+      include_patterns: formData.include_patterns.split(',').map(s => s.trim()).filter(Boolean),
+      exclude_patterns: formData.exclude_patterns.split(',').map(s => s.trim()).filter(Boolean),
+    };
+
     if (editingSource) {
-      updateMutation.mutate({ id: editingSource.id, data: formData });
+      updateMutation.mutate({ id: editingSource.id, data: payload });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(payload);
     }
   };
 
@@ -189,64 +228,86 @@ export default function SourcesPage() {
                 <TableBody>
                   {sourcesData?.items.map((source) => (
                     <TableRow key={source.id}>
-                      <TableCell>
-                        <div className="flex items-center">
-                          {source.is_important && (
-                            <Star className="mr-2 h-4 w-4 text-yellow-500" />
-                          )}
-                          <span className="font-medium">{source.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge>{getSourceTypeLabel(source.type)}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <a
-                          href={source.base_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center text-primary-600 hover:underline"
-                        >
-                          {truncate(source.base_url, 30)}
-                          <ExternalLink className="ml-1 h-3 w-3" />
-                        </a>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-semibold">{source.items_extracted_count}</span>
-                        <span className="text-gray-500"> / {source.urls_discovered_count} URLs</span>
-                      </TableCell>
-                      <TableCell>{formatDateTime(source.last_scraped_at)}</TableCell>
-                      <TableCell>
-                        <Badge variant={source.is_active ? 'success' : 'default'}>
-                          {source.is_active ? 'Active' : 'Inactive'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => scrapeMutation.mutate(source.id)}
-                            disabled={!source.is_active}
-                          >
-                            <Play className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => openEditModal(source)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleDelete(source)}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </div>
-                      </TableCell>
+                      {(() => {
+                        const latestJob = getLatestJob(source.id);
+                        const isRunning = latestJob?.status === 'RUNNING';
+
+                        return (
+                          <>
+                            <TableCell>
+                              <div className="flex items-center">
+                                {source.is_important && (
+                                  <Star className="mr-2 h-4 w-4 text-yellow-500" />
+                                )}
+                                <span className="font-medium">{source.name}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge>{getSourceTypeLabel(source.type)}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <a
+                                href={source.base_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center text-primary-600 hover:underline"
+                              >
+                                {truncate(source.base_url, 30)}
+                                <ExternalLink className="ml-1 h-3 w-3" />
+                              </a>
+                            </TableCell>
+                            <TableCell>
+                              <span className="font-semibold">{source.items_extracted_count}</span>
+                              <span className="text-gray-500"> / {source.urls_discovered_count} URLs</span>
+                            </TableCell>
+                            <TableCell>{formatDateTime(source.last_scraped_at)}</TableCell>
+                            <TableCell>
+                              <Badge variant={source.is_active ? 'success' : 'default'}>
+                                {source.is_active ? 'Active' : 'Inactive'}
+                              </Badge>
+                              {latestJob && (
+                                <div className="mt-1">
+                                  <Badge
+                                    variant={
+                                      latestJob.status === 'RUNNING' ? 'primary' :
+                                        latestJob.status === 'FAILED' ? 'danger' :
+                                          latestJob.status === 'COMPLETED' ? 'success' : 'default'
+                                    }
+                                  >
+                                    Job: {latestJob.status}
+                                  </Badge>
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center space-x-2">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => scrapeMutation.mutate(source.id)}
+                                  disabled={!source.is_active || isRunning}
+                                >
+                                  <Play className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => openEditModal(source)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleDelete(source)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </>
+                        );
+                      })()}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -287,6 +348,44 @@ export default function SourcesPage() {
             required
           />
 
+          <Input
+            label="Sitemap URL (optional)"
+            value={formData.sitemap_url}
+            onChange={(e) => setFormData({ ...formData, sitemap_url: e.target.value })}
+            placeholder="https://example.edu/sitemap.xml"
+          />
+
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Deep Crawl Depth"
+              type="number"
+              min="0"
+              max="5"
+              value={formData.dfs_depth}
+              onChange={(e) => setFormData({ ...formData, dfs_depth: Number(e.target.value) })}
+              placeholder="1"
+            />
+            <Input
+              label="Max URLs Per Run"
+              type="number"
+              min="1"
+              value={formData.max_urls_per_run}
+              onChange={(e) => setFormData({ ...formData, max_urls_per_run: e.target.value })}
+              placeholder="1000"
+            />
+          </div>
+
+          <Select
+            label="Scrape Frequency"
+            value={formData.scrape_frequency}
+            onChange={(e) => setFormData({ ...formData, scrape_frequency: e.target.value })}
+            options={[
+              { value: 'DAILY', label: 'Daily' },
+              { value: 'WEEKLY', label: 'Weekly' },
+              { value: 'MONTHLY', label: 'Monthly' },
+            ]}
+          />
+
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
               Target Item Types
@@ -317,6 +416,29 @@ export default function SourcesPage() {
                   {option.label}
                 </label>
               ))}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Include URL Patterns (comma separated)</label>
+              <textarea
+                value={formData.include_patterns}
+                onChange={(e) => setFormData({ ...formData, include_patterns: e.target.value })}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                rows={2}
+                placeholder="scholarship, fellowship, grant..."
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Exclude URL Patterns (comma separated)</label>
+              <textarea
+                value={formData.exclude_patterns}
+                onChange={(e) => setFormData({ ...formData, exclude_patterns: e.target.value })}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                rows={2}
+                placeholder="login, authors, wp-admin..."
+              />
             </div>
           </div>
 

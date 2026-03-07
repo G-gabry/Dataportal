@@ -14,7 +14,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from config import (
     GEMINI_API_KEY, GEMINI_MODEL,
@@ -27,8 +28,7 @@ from utils.progress import save_extraction_batch
 
 log = get_logger("step5_extract")
 
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+GLOBAL_GENAI_CLIENT = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 _SCRAPED_AT = datetime.now(timezone.utc).isoformat()
 
@@ -146,14 +146,16 @@ async def _call_gemini(prompt: str) -> Optional[str]:
     """Call Gemini with retry."""
     for attempt in range(EXTRACTION_RETRY_ATTEMPTS):
         try:
-            model = genai.GenerativeModel(GEMINI_MODEL)
+            if not GLOBAL_GENAI_CLIENT:
+                raise ValueError("GEMINI_API_KEY not configured")
             response = await asyncio.to_thread(
-                model.generate_content,
-                prompt,
-                generation_config={
-                    "temperature": 0.1,
-                    "max_output_tokens": 8192,
-                },
+                GLOBAL_GENAI_CLIENT.models.generate_content,
+                model=GEMINI_MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.1,
+                    max_output_tokens=8192,
+                ),
             )
             return response.text
         except Exception as e:

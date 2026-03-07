@@ -70,7 +70,28 @@ def run_worker():
                 # We pass the source_id to main.py so it ONLY scrapes that source
                 cmd = ["venv/bin/python", "main.py", "--source-id", str(source_id)]
                 
-                process = subprocess.run(cmd, capture_output=True, text=True)
+                log_file = f"output/logs/job_{job_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+                os.makedirs(os.path.dirname(log_file), exist_ok=True)
+                
+                print(f"[{datetime.now().isoformat()}] Streaming logs to {log_file}")
+                
+                with open(log_file, "w", encoding="utf-8") as f:
+                    process = subprocess.Popen(
+                        cmd, 
+                        stdout=subprocess.PIPE, 
+                        stderr=subprocess.STDOUT, 
+                        text=True, 
+                        bufsize=1
+                    )
+                    
+                    full_log = []
+                    for line in process.stdout:
+                        print(line, end="")
+                        f.write(line)
+                        f.flush()
+                        full_log.append(line)
+                        
+                    process.wait()
                 
                 # 4. Handle results and mark as COMPLETED or FAILED
                 if process.returncode == 0:
@@ -81,7 +102,7 @@ def run_worker():
                 else:
                     print(f"[{datetime.now().isoformat()}] Job {job_id} FAILED.")
                     # Save the last 2000 chars of the error log for the UI
-                    error_log = process.stderr[-2000:] if process.stderr else "Unknown error"
+                    error_log = "".join(full_log)[-2000:] if full_log else "Unknown error"
                     conn.execute(text(
                         "UPDATE scrape_jobs SET status = 'FAILED', completed_at = NOW(), error_log = :error WHERE id = :id"
                     ), {"id": job_id, "error": error_log})

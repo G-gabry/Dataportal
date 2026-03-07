@@ -14,7 +14,8 @@ import json
 import re
 from typing import Dict, List, Optional, Tuple
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from config import (
     GEMINI_API_KEY, GEMINI_MODEL,
@@ -26,8 +27,7 @@ from utils.progress import upsert_url
 
 log = get_logger("step4_resolve")
 
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+GLOBAL_GENAI_CLIENT = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 _CLASSIFICATION_PROMPT = """
 You are classifying a web page into exactly ONE of 4 types, or NOT_RELEVANT.
@@ -93,11 +93,16 @@ async def _classify_one(
     async with semaphore:
         for attempt in range(3):
             try:
-                model = genai.GenerativeModel(GEMINI_MODEL)
+                if not GLOBAL_GENAI_CLIENT:
+                    raise ValueError("GEMINI_API_KEY not configured")
                 response = await asyncio.to_thread(
-                    model.generate_content,
-                    prompt,
-                    generation_config={"temperature": 0.1, "max_output_tokens": 100},
+                    GLOBAL_GENAI_CLIENT.models.generate_content,
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.1,
+                        max_output_tokens=100,
+                    ),
                 )
                 raw = response.text.strip()
 

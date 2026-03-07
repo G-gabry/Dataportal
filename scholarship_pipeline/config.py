@@ -29,7 +29,7 @@ PORTAL_API_TOKEN: str = os.getenv("PORTAL_API_TOKEN", "")
 SOURCES_CACHE_FILE    = Path(__file__).parent / "sources_cache.json"
 
 # ── Sitemap / Discovery ───────────────────────────────────────────────────────
-SITEMAP_MAX_AGE_DAYS: int  = 540    # skip posts older than 18 months
+SITEMAP_MAX_AGE_DAYS: int  = 730    # skip posts older than 24 months
 FIRECRAWL_MAP_LIMIT: int   = 5000   # max URLs per /v1/map call
 
 # ── URL Classification — Tier 1 Heuristics ───────────────────────────────────
@@ -86,7 +86,7 @@ ALWAYS_SKIP_DOMAINS: set = {
 }
 
 # ── Crawl4AI Settings ─────────────────────────────────────────────────────────
-CRAWL_MAX_CONCURRENT: int    = 1      # MemoryAdaptiveDispatcher max sessions
+CRAWL_MAX_CONCURRENT: int    = 4      # MemoryAdaptiveDispatcher max sessions
 CRAWL_MEMORY_THRESHOLD: float = 85.0  # throttle when RAM > 85%
 CRAWL_PAGE_TIMEOUT_MS: int   = 30_000 # 30s per page
 CRAWL_MEAN_DELAY: float      = 0.7    # politeness delay between requests

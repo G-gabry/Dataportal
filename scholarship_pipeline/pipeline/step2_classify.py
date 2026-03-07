@@ -12,7 +12,8 @@ import re
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from config import (
     TYPE_URL_SIGNALS, URL_EXCLUDE_PATTERNS, PAGINATION_PATTERNS,
@@ -24,8 +25,7 @@ from utils.progress import upsert_url
 
 log = get_logger("step2_classify")
 
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+GLOBAL_GENAI_CLIENT = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 _PAGINATION_RE = [re.compile(p) for p in PAGINATION_PATTERNS]
 
@@ -90,11 +90,16 @@ async def _classify_urls_with_ai_batched(urls: List[str]) -> Dict[str, str]:
         prompt = _URL_CLASSIFY_PROMPT.format(urls="\n".join(chunk))
         for attempt in range(3):
             try:
-                model = genai.GenerativeModel(GEMINI_MODEL)
+                if not GLOBAL_GENAI_CLIENT:
+                    raise ValueError("GEMINI_API_KEY not configured")
                 response = await asyncio.to_thread(
-                    model.generate_content,
-                    prompt,
-                    generation_config={"temperature": 0.1, "max_output_tokens": 2048},
+                    GLOBAL_GENAI_CLIENT.models.generate_content,
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.1,
+                        max_output_tokens=2048,
+                    ),
                 )
                 raw = response.text.strip()
                 match = re.search(r'\{[\s\S]+\}', raw)

@@ -36,8 +36,9 @@ class SourceConfig:
     id: str
     name: str
     base_url: str
-    sitemap_url: Optional[str]            # from extra_data.sitemap_url
-    dfs_depth: int                        # from extra_data.dfs_depth
+    sitemap_url: Optional[str]            # from sitemap_url
+    dfs_depth: int                        # from dfs_depth
+    max_urls_per_run: Optional[int]       # from max_urls_per_run
     include_patterns: List[str]
     exclude_patterns: List[str]
     target_item_types: List[str]          # ["SCHOLARSHIP", "PROGRAM", ...]
@@ -96,13 +97,13 @@ async def load_sources(skip_api: bool = False) -> List[SourceConfig]:
 
 
 def _to_source_config(s: dict) -> SourceConfig:
-    extra = s.get("extra_data") or {}
     return SourceConfig(
         id              = str(s["id"]),
         name            = s.get("name", "unknown"),
         base_url        = s.get("base_url", "").rstrip("/"),
-        sitemap_url     = extra.get("sitemap_url"),
-        dfs_depth       = int(extra.get("dfs_depth", DFS_DEFAULT_DEPTH)),
+        sitemap_url     = s.get("sitemap_url"),
+        dfs_depth       = int(s.get("dfs_depth") if s.get("dfs_depth") is not None else DFS_DEFAULT_DEPTH),
+        max_urls_per_run = s.get("max_urls_per_run"),
         include_patterns = s.get("include_patterns") or DEFAULT_URL_KEYWORDS_INCLUDE,
         exclude_patterns = s.get("exclude_patterns") or DEFAULT_URL_KEYWORDS_EXCLUDE,
         target_item_types = [t for t in (s.get("target_item_types") or [])],

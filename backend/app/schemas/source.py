@@ -13,6 +13,9 @@ class SourceBase(BaseModel):
     scrape_frequency: str = "MONTHLY"
     is_important: bool = False
     is_active: bool = True
+    sitemap_url: Optional[str] = None
+    dfs_depth: int = 1
+    max_urls_per_run: Optional[int] = None
     include_patterns: List[str] = []
     exclude_patterns: List[str] = []
     extra_data: Dict[str, Any] = {}
@@ -31,6 +34,9 @@ class SourceUpdate(BaseModel):
     scrape_frequency: Optional[str] = None
     is_important: Optional[bool] = None
     is_active: Optional[bool] = None
+    sitemap_url: Optional[str] = None
+    dfs_depth: Optional[int] = None
+    max_urls_per_run: Optional[int] = None
     include_patterns: Optional[List[str]] = None
     exclude_patterns: Optional[List[str]] = None
     extra_data: Optional[Dict[str, Any]] = None
@@ -46,6 +52,9 @@ class SourceResponse(BaseModel):
     scrape_frequency: str
     is_important: bool
     is_active: bool
+    sitemap_url: Optional[str]
+    dfs_depth: int
+    max_urls_per_run: Optional[int]
     include_patterns: List[str]
     exclude_patterns: List[str]
     extra_data: Dict[str, Any]

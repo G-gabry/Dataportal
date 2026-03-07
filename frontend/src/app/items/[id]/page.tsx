@@ -94,8 +94,8 @@ export default function ItemDetailPage() {
                   fieldStatus === 'EXTRACTED'
                     ? 'success'
                     : fieldStatus === 'NOT_AVAILABLE'
-                    ? 'default'
-                    : 'warning'
+                      ? 'default'
+                      : 'warning'
                 }
               >
                 {fieldStatus}
@@ -107,8 +107,8 @@ export default function ItemDetailPage() {
               ? Array.isArray(displayValue)
                 ? displayValue.join(', ')
                 : typeof displayValue === 'object'
-                ? JSON.stringify(displayValue)
-                : String(displayValue)
+                  ? JSON.stringify(displayValue)
+                  : String(displayValue)
               : 'N/A'}
           </p>
         </div>
@@ -293,6 +293,26 @@ export default function ItemDetailPage() {
                   renderField(fieldName, fieldInfo, item.data[fieldName])
                 )}
 
+                {/* Additional Information - Render any fields NOT in the schema */}
+                {(() => {
+                  const extraFields = Object.keys(item.data).filter(
+                    (key) => !schemaFields[key] && key !== 'name' && key !== 'id' && key !== 'scraped_at'
+                  );
+                  if (extraFields.length > 0) {
+                    return (
+                      <div className="mt-8 border-t pt-6">
+                        <h4 className="flex items-center text-sm font-semibold text-gray-900 mb-4">
+                          <Database className="mr-2 h-4 w-4 text-primary-500" />
+                          Other Extracted Data
+                        </h4>
+                        <div className="grid grid-cols-1 gap-1">
+                          {extraFields.map((key) => renderField(key, { type: 'string' }, item.data[key]))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </CardContent>
             </Card>
 
