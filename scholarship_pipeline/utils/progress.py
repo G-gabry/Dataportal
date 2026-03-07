@@ -240,7 +240,7 @@ def get_type_maps_from_db(run_id: str, sources) -> dict:
     conn = _get_conn()
     rows = conn.execute(
         """SELECT url, source_id, detected_type FROM urls
-           WHERE run_id=? AND crawl_status='pending' AND detected_type IS NOT NULL
+           WHERE run_id=? AND detected_type IS NOT NULL
            AND detected_type != 'NOT_RELEVANT'""",
         (run_id,)
     ).fetchall()
