@@ -31,7 +31,7 @@ def sync_schemas():
                     "duration": {"type": "string"},
                     "link": {"type": "string", "description": "Direct application link"},
                     "required_documents": {"type": "array"},
-                    "additional_info": {"type": "text", "description": "Extract ALL remaining important details from the page not captured in other fields. Organize this into a beautifully formatted, highly readable Markdown structure (using headers, bullet points, and emojis). Include all specific details word-for-word, but present them professionally."}
+                    "additional_info": {"type": "text", "description": "Extract ALL remaining text from the page word-for-word. Organize it into a beautiful Markdown document following this SHAPE: '## Details About [Name]' followed by list of facts like '* **Label** : Value', then '### [Category Name]' for sections like Financial Benefits, Eligibility, etc. Use emojis and professional spacing. DO NOT omit any details."}
                 }
             },
             {
@@ -53,7 +53,7 @@ def sync_schemas():
                     "start_date": {"type": "string"},
                     "link": {"type": "string"},
                     "requirements": {"type": "array"},
-                    "additional_info": {"type": "text", "description": "Extract ALL remaining important details from the page not captured in other fields. Organize this into a beautifully formatted, highly readable Markdown structure (using headers, bullet points, and emojis). Include all specific details word-for-word, but present them professionally."}
+                    "additional_info": {"type": "text", "description": "Extract ALL remaining text from the page word-for-word. Organize it into a beautiful Markdown document following this SHAPE: '## Details About [Name]' followed by list of facts like '* **Label** : Value', then '### [Category Name]' for sections like Financial Benefits, Eligibility, etc. Use emojis and professional spacing. DO NOT omit any details."}
                 }
             },
             {
@@ -74,7 +74,7 @@ def sync_schemas():
                     "registration_fee": {"type": "string"},
                     "travel_grant_available": {"type": "boolean"},
                     "link": {"type": "string"},
-                    "additional_info": {"type": "text", "description": "Extract ALL remaining important details from the page not captured in other fields. Organize this into a beautifully formatted, highly readable Markdown structure (using headers, bullet points, and emojis). Include all specific details word-for-word, but present them professionally."}
+                    "additional_info": {"type": "text", "description": "Extract ALL remaining text from the page word-for-word. Organize it into a beautiful Markdown document following this SHAPE: '## Details About [Name]' followed by list of facts like '* **Label** : Value', then '### [Category Name]' for sections like Financial Benefits, Eligibility, etc. Use emojis and professional spacing. DO NOT omit any details."}
                 }
             },
             {
@@ -96,7 +96,7 @@ def sync_schemas():
                     "mobility_type": {"type": "string"},
                     "link": {"type": "string"},
                     "requirements": {"type": "array"},
-                    "additional_info": {"type": "text", "description": "Extract ALL remaining important details from the page not captured in other fields. Organize this into a beautifully formatted, highly readable Markdown structure (using headers, bullet points, and emojis). Include all specific details word-for-word, but present them professionally."}
+                    "additional_info": {"type": "text", "description": "Extract ALL remaining text from the page word-for-word. Organize it into a beautiful Markdown document following this SHAPE: '## Details About [Name]' followed by list of facts like '* **Label** : Value', then '### [Category Name]' for sections like Financial Benefits, Eligibility, etc. Use emojis and professional spacing. DO NOT omit any details."}
                 }
             }
         ]
