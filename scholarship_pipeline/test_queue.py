@@ -47,8 +47,7 @@ def setup_and_trigger():
                     completed_at TIMESTAMP WITH TIME ZONE,
                     error_log TEXT,
                     created_by UUID REFERENCES users(id),
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()),
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now())
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now())
                 );
             """))
             print("Verified 'scrape_jobs' table exists.")
@@ -67,8 +66,8 @@ def setup_and_trigger():
             job_id = str(uuid.uuid4())
             conn.execute(
                 text("""
-                INSERT INTO scrape_jobs (id, source_id, job_type, status, created_at, updated_at) 
-                VALUES (:id, :source_id, 'FULL_SCRAPE', 'PENDING', NOW(), NOW())
+                INSERT INTO scrape_jobs (id, source_id, job_type, status, created_at) 
+                VALUES (:id, :source_id, 'FULL_SCRAPE', 'PENDING', NOW())
                 """),
                 {"id": job_id, "source_id": source_id}
             )
