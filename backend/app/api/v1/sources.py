@@ -150,7 +150,18 @@ def trigger_scrape(
     if not source.is_active:
         raise HTTPException(status_code=400, detail="Source is not active")
 
-    # Start background job
-    background_tasks.add_task(run_scrape_job, source_id, job_type, current_user.id)
+    from app.models.scrape_job import ScrapeJob
+    from app.models.enums import JobStatus
+    
+    # Create the job in the queue
+    job = ScrapeJob(
+        source_id=source_id,
+        job_type=job_type,
+        status=JobStatus.PENDING,
+        created_by=current_user.id
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
 
     return MessageResponse(message=f"Scrape job started for '{source.name}'")
