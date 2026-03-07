@@ -28,7 +28,7 @@ _CONCURRENCY = 2  # parallel saves - reduced for localtunnel stability
 
 def _auth_headers() -> dict:
     headers = {
-        "bypass-tunnel-reminders": "true",  # Essential for localtunnel API access
+        "Bypass-Tunnel-Reminder": "true",  # Essential for localtunnel API access
     }
     if PORTAL_API_TOKEN:
         headers["Authorization"] = f"Bearer {PORTAL_API_TOKEN}"
