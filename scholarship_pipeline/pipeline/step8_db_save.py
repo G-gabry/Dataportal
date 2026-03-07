@@ -22,14 +22,17 @@ from utils.logger import get_logger
 
 log = get_logger("step8_db_save")
 
-_TIMEOUT = 30  # seconds per request
-_CONCURRENCY = 5  # parallel saves
+_TIMEOUT = 60  # seconds per request - increased for localtunnel
+_CONCURRENCY = 2  # parallel saves - reduced for localtunnel stability
 
 
 def _auth_headers() -> dict:
+    headers = {
+        "bypass-tunnel-reminders": "true",  # Essential for localtunnel API access
+    }
     if PORTAL_API_TOKEN:
-        return {"Authorization": f"Bearer {PORTAL_API_TOKEN}"}
-    return {}
+        headers["Authorization"] = f"Bearer {PORTAL_API_TOKEN}"
+    return headers
 
 
 async def _save_one(
