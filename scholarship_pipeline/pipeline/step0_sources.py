@@ -136,7 +136,7 @@ async def load_item_schemas() -> dict:
         if t not in schemas:
             schemas[t] = ItemSchemaConfig(
                 item_type             = t,
-                schema_fields         = {},
+                schema_fields         = {"additional_info": {"type": "text", "description": "Raw extraction Catch-all"}},
                 extraction_prompt     = _default_extraction_prompt(t),
                 classification_prompt = "",
             )
@@ -162,7 +162,9 @@ For EACH scholarship found, return a JSON object with these fields:
 name, scholarship_name, summary, url, country, host_institution, host_organization,
 eligible_countries (list), eligible_degrees (list), eligible_fields (list),
 funding_type, amount, benefits (list), application_deadline, start_date,
-duration, link, required_documents (list), scraped_at.
+duration, link, required_documents (list), additional_info, scraped_at.
+
+NOTE on additional_info: EXTRACT EVERY SINGLE PIECE OF TEXT FROM THE PAGE THAT WAS NOT CAPTURED IN THE OTHER FIELDS. DO NOT SUMMARIZE. DO NOT OMIT ANYTHING. PASTE THE ENTIRE REMAINING TEXT OF THE PAGE HERE WORD-FOR-WORD.
 {shared}"""
 
     if item_type == "PROGRAM":
@@ -171,7 +173,9 @@ For EACH program found, return a JSON object with these fields:
 name, program_name, summary, url, country, host_institution,
 degree_type, fields_of_study (list), duration, language_of_instruction,
 tuition_fee, scholarship_available, application_deadline, start_date,
-link, requirements (list), scraped_at.
+link, requirements (list), additional_info, scraped_at.
+
+NOTE on additional_info: EXTRACT EVERY SINGLE PIECE OF TEXT FROM THE PAGE THAT WAS NOT CAPTURED IN THE OTHER FIELDS. DO NOT SUMMARIZE. DO NOT OMIT ANYTHING. PASTE THE ENTIRE REMAINING TEXT OF THE PAGE HERE WORD-FOR-WORD.
 {shared}"""
 
     if item_type == "CONFERENCE":
@@ -180,7 +184,9 @@ For EACH conference found, return a JSON object with these fields:
 name, conference_name, summary, url, country, venue, organizer,
 event_date, submission_deadline, registration_deadline, topics (list),
 attendance_type (in-person/virtual/hybrid), registration_fee,
-travel_grant_available, link, scraped_at.
+travel_grant_available, link, additional_info, scraped_at.
+
+NOTE on additional_info: EXTRACT EVERY SINGLE PIECE OF TEXT FROM THE PAGE THAT WAS NOT CAPTURED IN THE OTHER FIELDS. DO NOT SUMMARIZE. DO NOT OMIT ANYTHING. PASTE THE ENTIRE REMAINING TEXT OF THE PAGE HERE WORD-FOR-WORD.
 {shared}"""
 
     if item_type == "EXCHANGE":
@@ -189,7 +195,9 @@ For EACH exchange program found, return a JSON object with these fields:
 name, summary, url, country, host_institution,
 partner_countries (list), eligible_nationalities (list), level_of_study (list),
 duration, funding_available, stipend_amount, application_deadline,
-start_date, mobility_type, link, requirements (list), scraped_at.
+start_date, mobility_type, link, requirements (list), additional_info, scraped_at.
+
+NOTE on additional_info: EXTRACT EVERY SINGLE PIECE OF TEXT FROM THE PAGE THAT WAS NOT CAPTURED IN THE OTHER FIELDS. DO NOT SUMMARIZE. DO NOT OMIT ANYTHING. PASTE THE ENTIRE REMAINING TEXT OF THE PAGE HERE WORD-FOR-WORD.
 {shared}"""
 
     return f"Extract all {item_type} opportunities from these pages as a JSON array."
