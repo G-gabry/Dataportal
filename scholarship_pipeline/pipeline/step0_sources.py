@@ -149,43 +149,43 @@ CRITICAL RULES:
 - "eligible_countries": null unless explicitly stated. "All" only if page says "open to all nationalities".
 - "application_deadline": ISO 8601 (YYYY-MM-DD) or "rolling" if stated. null if not mentioned.
 - "funding_type": "fully_funded" | "partial" | "unknown" — based on explicit statements only.
-- source_url must be the exact URL where the data was found.
+- url: must be the exact URL where the data was found.
 - Return a JSON ARRAY only. No explanation text before or after.
 """
     if item_type == "SCHOLARSHIP":
         return f"""You are extracting scholarship data from the following web pages.
 For EACH scholarship found, return a JSON object with these fields:
-title, description, source_url, host_country, host_institution, host_organization,
+name, scholarship_name, summary, url, country, host_institution, host_organization,
 eligible_countries (list), eligible_degrees (list), eligible_fields (list),
 funding_type, amount, benefits (list), application_deadline, start_date,
-duration, application_link, required_documents (list), scraped_at.
+duration, link, required_documents (list), scraped_at.
 {shared}"""
 
     if item_type == "PROGRAM":
         return f"""You are extracting academic program data from the following web pages.
 For EACH program found, return a JSON object with these fields:
-title, description, source_url, host_country, host_institution,
+name, program_name, summary, url, country, host_institution,
 degree_type, fields_of_study (list), duration, language_of_instruction,
 tuition_fee, scholarship_available, application_deadline, start_date,
-application_link, requirements (list), scraped_at.
+link, requirements (list), scraped_at.
 {shared}"""
 
     if item_type == "CONFERENCE":
         return f"""You are extracting conference/event data from the following web pages.
 For EACH conference found, return a JSON object with these fields:
-title, description, source_url, host_country, venue, organizer,
+name, conference_name, summary, url, country, venue, organizer,
 event_date, submission_deadline, registration_deadline, topics (list),
 attendance_type (in-person/virtual/hybrid), registration_fee,
-travel_grant_available, application_link, scraped_at.
+travel_grant_available, link, scraped_at.
 {shared}"""
 
     if item_type == "EXCHANGE":
         return f"""You are extracting exchange/mobility program data from the following web pages.
 For EACH exchange program found, return a JSON object with these fields:
-title, description, source_url, host_country, host_institution,
+name, summary, url, country, host_institution,
 partner_countries (list), eligible_nationalities (list), level_of_study (list),
 duration, funding_available, stipend_amount, application_deadline,
-start_date, mobility_type, application_link, requirements (list), scraped_at.
+start_date, mobility_type, link, requirements (list), scraped_at.
 {shared}"""
 
     return f"Extract all {item_type} opportunities from these pages as a JSON array."
