@@ -5,7 +5,7 @@ from app.core.database import SessionLocal, engine, Base
 # Import all models so they are registered with Base
 from app.models.user import User
 from app.models.source import Source
-from app.models.url import DiscoveredURL
+from app.models.discovered_url import DiscoveredURL
 from app.models.item import Item
 from app.models.scrape_job import ScrapeJob
 from app.models.ai_log import AILog

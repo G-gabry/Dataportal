@@ -30,7 +30,8 @@ def sync_schemas():
                     "start_date": {"type": "string"},
                     "duration": {"type": "string"},
                     "link": {"type": "string", "description": "Direct application link"},
-                    "required_documents": {"type": "array"}
+                    "required_documents": {"type": "array"},
+                    "additional_info": {"type": "text", "description": "A well-designed, comprehensive paragraph containing ALL remaining important details, text, and context found on the page about this item that was not captured in the other fields."}
                 }
             },
             {
@@ -51,7 +52,8 @@ def sync_schemas():
                     "application_deadline": {"type": "string"},
                     "start_date": {"type": "string"},
                     "link": {"type": "string"},
-                    "requirements": {"type": "array"}
+                    "requirements": {"type": "array"},
+                    "additional_info": {"type": "text", "description": "A well-designed, comprehensive paragraph containing ALL remaining important details, text, and context found on the page about this item that was not captured in the other fields."}
                 }
             },
             {
@@ -71,7 +73,8 @@ def sync_schemas():
                     "attendance_type": {"type": "string", "options": ["in-person", "virtual", "hybrid"]},
                     "registration_fee": {"type": "string"},
                     "travel_grant_available": {"type": "boolean"},
-                    "link": {"type": "string"}
+                    "link": {"type": "string"},
+                    "additional_info": {"type": "text", "description": "A well-designed, comprehensive paragraph containing ALL remaining important details, text, and context found on the page about this item that was not captured in the other fields."}
                 }
             },
             {
@@ -92,7 +95,8 @@ def sync_schemas():
                     "start_date": {"type": "string"},
                     "mobility_type": {"type": "string"},
                     "link": {"type": "string"},
-                    "requirements": {"type": "array"}
+                    "requirements": {"type": "array"},
+                    "additional_info": {"type": "text", "description": "A well-designed, comprehensive paragraph containing ALL remaining important details, text, and context found on the page about this item that was not captured in the other fields."}
                 }
             }
         ]

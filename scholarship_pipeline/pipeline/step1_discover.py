@@ -63,6 +63,12 @@ async def discover_source(source: SourceConfig, run_id: str) -> List[str]:
 
     # Deduplicate
     urls = list(dict.fromkeys(u.strip().rstrip("/") for u in urls if u.strip()))
+    
+    # Enforce UI-configured maximum URLs per scrape
+    if source.max_urls_per_run and len(urls) > source.max_urls_per_run:
+        log.warning(f"[{source.name}] Capping discovered URLs from {len(urls)} to {source.max_urls_per_run}")
+        urls = urls[:source.max_urls_per_run]
+        
     log.info(f"[{source.name}] Total discovered: {len(urls)} unique URLs")
     return urls
 

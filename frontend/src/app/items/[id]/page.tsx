@@ -102,7 +102,7 @@ export default function ItemDetailPage() {
               </Badge>
             )}
           </div>
-          <p className="mt-1 text-gray-900">
+          <p className="mt-1 text-gray-900 whitespace-pre-wrap">
             {displayValue !== null && displayValue !== undefined
               ? Array.isArray(displayValue)
                 ? displayValue.join(', ')
