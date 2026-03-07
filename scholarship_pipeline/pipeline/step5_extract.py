@@ -95,10 +95,15 @@ def _build_batches(
 def _extract_json_array(raw: str) -> Optional[list]:
     """
     Robust JSON extraction — solves Problem #7.
-    Handles: text before JSON, single object vs array, truncated JSON.
+    Handles: text before JSON, single object vs array, truncated JSON,
+    and Gemini responses wrapped in markdown code fences.
     """
     if not raw:
         return None
+
+    # Strip markdown code fences (```json ... ``` or ``` ... ```)
+    raw = re.sub(r'^```(?:json)?\s*', '', raw.strip())
+    raw = re.sub(r'\s*```$', '', raw.strip())
 
     # Try direct parse first
     try:
@@ -263,13 +268,14 @@ async def run(
 
     # Merge resolved types from Step 4 content-peek
     def get_type(page: dict) -> str:
-        task = page.get("task")
         url = page.get("url", "")
         # Step 4 may have resolved this URL's type
         if url in resolved_types:
             return resolved_types[url]
-        if task:
-            return task.root_type or "AMBIGUOUS"
+        # Step 3 sets detected_type directly on each page dict
+        dt = page.get("detected_type", "")
+        if dt and dt not in ("AMBIGUOUS", ""):
+            return dt
         return "AMBIGUOUS"
 
     # Group pages by type across all sources

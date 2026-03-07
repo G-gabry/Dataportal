@@ -213,10 +213,13 @@ async def run(
                         continue
                     visited.add(url)
                     pages = await _dfs_crawl_root(crawler, url, max_depth, semaphore)
+                    root_type = type_map.get(url, "AMBIGUOUS")
                     for page in pages:
                         if page["url"] in visited:
                             continue
                         visited.add(page["url"])
+                        # Carry over the detected_type from type_map so step5 routes correctly
+                        page["detected_type"] = type_map.get(page["url"], root_type)
                         all_results[source_id].append(page)
                         log.info(f"  ✓ {page['url']} → {len(page['markdown'].split())} words")
                         upsert_url(run_id=run_id, source_id=source_id,
@@ -233,6 +236,8 @@ async def run(
                     result = await _crawl_url(crawler, url, semaphore)
                     if result:
                         visited.add(url)
+                        # Carry over the detected_type from type_map so step5 routes correctly
+                        result["detected_type"] = type_map.get(url, "AMBIGUOUS")
                         all_results[source_id].append(result)
                         log.info(f"  ✓ {url} → {len(result['markdown'].split())} words")
                         upsert_url(run_id=run_id, source_id=source_id,
