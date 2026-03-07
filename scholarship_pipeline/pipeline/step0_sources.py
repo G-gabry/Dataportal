@@ -52,7 +52,10 @@ class ItemSchemaConfig:
 
 
 def _auth_header() -> dict:
-    return {"Authorization": f"Bearer {PORTAL_API_TOKEN}"} if PORTAL_API_TOKEN else {}
+    headers = {"bypass-tunnel-reminders": "true"}
+    if PORTAL_API_TOKEN:
+        headers["Authorization"] = f"Bearer {PORTAL_API_TOKEN}"
+    return headers
 
 
 async def load_sources(skip_api: bool = False) -> List[SourceConfig]:
