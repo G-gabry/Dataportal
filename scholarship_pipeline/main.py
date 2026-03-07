@@ -101,6 +101,7 @@ async def main() -> None:
     from pipeline.step5_extract  import run as extract
     from pipeline.step6_dedup    import run as dedup
     from pipeline.step7_save     import run as save
+    from pipeline.step8_db_save  import run as save_to_db
 
     summary: dict = {}
 
@@ -205,6 +206,12 @@ async def main() -> None:
 
         # ── Step 7: Save ───────────────────────────────────────────────────────
         output_paths = save(final_items, summary, run_id)
+
+        # ── Step 8: Save to Database ───────────────────────────────────────────
+        db_result = await save_to_db(final_items, sources)
+        summary["db_saved"]  = db_result["saved"]
+        summary["db_failed"] = db_result["failed"]
+
         finish_run(run_id)
 
     except KeyboardInterrupt:
