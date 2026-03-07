@@ -123,7 +123,7 @@ async def main() -> None:
 
         if not args.skip_discover:
             discovered = await discover(sources, run_id, skip=False)
-            type_maps  = classify(discovered, sources, run_id, skip=False)
+            type_maps  = await classify(discovered, sources, run_id, skip=False)
 
             total_discovered = sum(len(v) for v in discovered.values())
             total_filtered   = sum(len(v) for v in type_maps.values())

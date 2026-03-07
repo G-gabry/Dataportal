@@ -6,16 +6,26 @@ Tier 2: Content-peek (post-crawl, 1500 chars + Gemini) — handles ~6%
 Tier 3: Universal extraction (Step 5 fallback) — handles remaining <1%
 """
 
+import asyncio
+import json
 import re
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from config import TYPE_URL_SIGNALS, URL_EXCLUDE_PATTERNS, PAGINATION_PATTERNS
+import google.generativeai as genai
+
+from config import (
+    TYPE_URL_SIGNALS, URL_EXCLUDE_PATTERNS, PAGINATION_PATTERNS,
+    GEMINI_API_KEY, GEMINI_MODEL
+)
 from pipeline.step0_sources import SourceConfig
 from utils.logger import get_logger
 from utils.progress import upsert_url
 
 log = get_logger("step2_classify")
+
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 _PAGINATION_RE = [re.compile(p) for p in PAGINATION_PATTERNS]
 
@@ -51,7 +61,61 @@ def _classify_url_heuristic(url: str) -> Optional[str]:
     return None  # AMBIGUOUS
 
 
-def classify_urls(
+_URL_CLASSIFY_PROMPT = """
+You are a URL classifier for an academic data pipeline.
+Given the following list of URLs, classify each URL into EXACTLY ONE of these types:
+- SCHOLARSHIP
+- PROGRAM
+- CONFERENCE
+- EXCHANGE
+- EXCLUDE (for login, news, authors, irrelevant pages, or bare domains with no path)
+- AMBIGUOUS (if it looks relevant but the type isn't clear from the URL)
+
+Focus ONLY on the URL path structure.
+URLs:
+{urls}
+
+Return a valid JSON object ONLY. Keys must be the exact URLs provided, values must be the type string.
+"""
+
+async def _classify_urls_with_ai_batched(urls: List[str]) -> Dict[str, str]:
+    if not urls or not GEMINI_API_KEY:
+        return {u: "AMBIGUOUS" for u in urls}
+        
+    results = {}
+    chunk_size = 50
+    chunks = [urls[i:i + chunk_size] for i in range(0, len(urls), chunk_size)]
+    
+    async def process_chunk(chunk):
+        prompt = _URL_CLASSIFY_PROMPT.format(urls="\n".join(chunk))
+        for attempt in range(3):
+            try:
+                model = genai.GenerativeModel(GEMINI_MODEL)
+                response = await asyncio.to_thread(
+                    model.generate_content,
+                    prompt,
+                    generation_config={"temperature": 0.1, "max_output_tokens": 2048},
+                )
+                raw = response.text.strip()
+                match = re.search(r'\{[\s\S]+\}', raw)
+                if match:
+                    data = json.loads(match.group())
+                    return {u: data.get(u, "AMBIGUOUS").upper().strip() for u in chunk}
+                break
+            except Exception as e:
+                log.warning(f"AI URL classify failed attempt {attempt+1}: {e}")
+                await asyncio.sleep(2)
+        return {u: "AMBIGUOUS" for u in chunk}
+
+    tasks = [process_chunk(c) for c in chunks]
+    chunk_results = await asyncio.gather(*tasks)
+    
+    for res in chunk_results:
+        results.update(res)
+        
+    return results
+
+async def classify_urls(
     urls: List[str],
     source: SourceConfig,
     run_id: str,
@@ -70,6 +134,7 @@ def classify_urls(
 
     type_map: Dict[str, str] = {}
     ambiguous: List[str] = []
+    needs_ai = []
 
     for url in urls:
         slug = url.lower()
@@ -84,27 +149,36 @@ def classify_urls(
             continue  # drop
 
         if result is None:
-            # Check source-level include patterns before marking AMBIGUOUS
+            # Check source-level include patterns
             if include_kw and any(kw in slug for kw in include_kw):
-                # Source says this looks relevant but we don't know type
-                type_map[url] = "AMBIGUOUS"
-                ambiguous.append(url)
+                needs_ai.append(url)
             elif not include_kw:
-                # No source filter — it's genuinely ambiguous
-                type_map[url] = "AMBIGUOUS"
-                ambiguous.append(url)
-            # else: source has include patterns and this URL doesn't match → skip
+                needs_ai.append(url)
+            # else: skip
         else:
             type_map[url] = result
 
+    if needs_ai:
+        log.info(f"[{source.name}] Sending {len(needs_ai)} unrecognized URLs to Gemini for AI filtering...")
+        ai_results = await _classify_urls_with_ai_batched(needs_ai)
+        for url, ai_type in ai_results.items():
+            if ai_type == "EXCLUDE" or ai_type == "NOT_RELEVANT":
+                continue # drop
+            elif ai_type in ("SCHOLARSHIP", "PROGRAM", "CONFERENCE", "EXCHANGE"):
+                type_map[url] = ai_type
+            else:
+                type_map[url] = "AMBIGUOUS"
+                ambiguous.append(url)
+
     # Persist to DB
     for url, detected_type in type_map.items():
+        classify_method = "ai_filter" if url in needs_ai else "heuristic"
         upsert_url(
             run_id=run_id,
             source_id=source.id,
             url=url,
             detected_type=detected_type,
-            classify_method="heuristic",
+            classify_method=classify_method,
             confidence=1.0 if detected_type != "AMBIGUOUS" else None,
             crawl_status="pending",
             depth=0,
@@ -113,13 +187,13 @@ def classify_urls(
 
     typed_count = sum(1 for t in type_map.values() if t != "AMBIGUOUS")
     log.info(
-        f"[{source.name}] Classified {len(type_map)} URLs: "
-        f"{typed_count} typed, {len(ambiguous)} AMBIGUOUS"
+        f"[{source.name}] Classified {len(urls)} URLs: "
+        f"{typed_count} typed, {len(ambiguous)} AMBIGUOUS, {len(urls) - len(type_map)} EXCLUDED"
     )
     return type_map, ambiguous
 
 
-def run(
+async def run(
     discovered: Dict[str, List[str]],
     sources: List[SourceConfig],
     run_id: str,
@@ -144,7 +218,7 @@ def run(
         if not source:
             continue
         try:
-            type_map, _ = classify_urls(urls, source, run_id)
+            type_map, _ = await classify_urls(urls, source, run_id)
             all_type_maps[source_id] = type_map
         except Exception as e:
             log.error(f"[{source_id}] Classification failed: {e}")
