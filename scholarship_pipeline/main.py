@@ -154,7 +154,9 @@ async def main() -> None:
             for sid in type_maps:
                 items = list(type_maps[sid].items())[:args.max_urls]
                 type_maps[sid] = dict(items)
-            log.info(f"--max-urls {args.max_urls}: capped to {args.max_urls} URLs per source for testing")
+            for source in sources:
+                source.dfs_depth = 0
+            log.info(f"--max-urls {args.max_urls}: capped to {args.max_urls} URLs and disabled DFS for quick testing")
 
         # ── Step 3: Crawl ──────────────────────────────────────────────────────
         crawl_results: dict = {}
