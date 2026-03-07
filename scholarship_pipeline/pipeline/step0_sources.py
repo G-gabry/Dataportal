@@ -164,7 +164,7 @@ eligible_countries (list), eligible_degrees (list), eligible_fields (list),
 funding_type, amount, benefits (list), application_deadline, start_date,
 duration, link, required_documents (list), additional_info, scraped_at.
 
-NOTE on additional_info: EXTRACT EVERY SINGLE PIECE OF TEXT FROM THE PAGE THAT WAS NOT CAPTURED IN THE OTHER FIELDS. DO NOT SUMMARIZE. DO NOT OMIT ANYTHING. PASTE THE ENTIRE REMAINING TEXT OF THE PAGE HERE WORD-FOR-WORD.
+NOTE on additional_info: Extract ALL remaining important details from the page not captured in other fields. Organize this into a beautifully formatted, highly readable Markdown structure (using headers, bullet points, and emojis). Include all specific details word-for-word, but present them professionally.
 {shared}"""
 
     if item_type == "PROGRAM":
@@ -175,7 +175,7 @@ degree_type, fields_of_study (list), duration, language_of_instruction,
 tuition_fee, scholarship_available, application_deadline, start_date,
 link, requirements (list), additional_info, scraped_at.
 
-NOTE on additional_info: EXTRACT EVERY SINGLE PIECE OF TEXT FROM THE PAGE THAT WAS NOT CAPTURED IN THE OTHER FIELDS. DO NOT SUMMARIZE. DO NOT OMIT ANYTHING. PASTE THE ENTIRE REMAINING TEXT OF THE PAGE HERE WORD-FOR-WORD.
+NOTE on additional_info: Extract ALL remaining important details from the page not captured in other fields. Organize this into a beautifully formatted, highly readable Markdown structure (using headers, bullet points, and emojis). Include all specific details word-for-word, but present them professionally.
 {shared}"""
 
     if item_type == "CONFERENCE":
@@ -186,7 +186,7 @@ event_date, submission_deadline, registration_deadline, topics (list),
 attendance_type (in-person/virtual/hybrid), registration_fee,
 travel_grant_available, link, additional_info, scraped_at.
 
-NOTE on additional_info: EXTRACT EVERY SINGLE PIECE OF TEXT FROM THE PAGE THAT WAS NOT CAPTURED IN THE OTHER FIELDS. DO NOT SUMMARIZE. DO NOT OMIT ANYTHING. PASTE THE ENTIRE REMAINING TEXT OF THE PAGE HERE WORD-FOR-WORD.
+NOTE on additional_info: Extract ALL remaining important details from the page not captured in other fields. Organize this into a beautifully formatted, highly readable Markdown structure (using headers, bullet points, and emojis). Include all specific details word-for-word, but present them professionally.
 {shared}"""
 
     if item_type == "EXCHANGE":
