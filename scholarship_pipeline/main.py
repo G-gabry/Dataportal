@@ -81,6 +81,8 @@ async def main() -> None:
                         help="Resume a specific previous run ID")
     parser.add_argument("--source-id",     type=str, default=None,
                         help="Process a single source only (for testing)")
+    parser.add_argument("--max-urls",      type=int, default=None,
+                        help="Cap URLs per source (e.g. --max-urls 20 for quick testing)")
     args = parser.parse_args()
 
     run_id = args.run_id or _make_run_id()
@@ -145,6 +147,13 @@ async def main() -> None:
             type_maps = get_type_maps_from_db(run_id, sources)
             summary["total_discovered"] = "skipped (resumed)"
             summary["total_filtered"] = sum(len(v) for v in type_maps.values())
+
+        # ── Optional URL cap for quick testing ───────────────────────────────
+        if args.max_urls:
+            for sid in type_maps:
+                items = list(type_maps[sid].items())[:args.max_urls]
+                type_maps[sid] = dict(items)
+            log.info(f"--max-urls {args.max_urls}: capped to {args.max_urls} URLs per source for testing")
 
         # ── Step 3: Crawl ──────────────────────────────────────────────────────
         crawl_results: dict = {}

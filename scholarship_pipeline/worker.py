@@ -13,8 +13,35 @@ if not DB_URL:
 
 engine = create_engine(DB_URL)
 
+
+def recover_stale_jobs():
+    """
+    On startup, reset any jobs that were left as RUNNING (orphaned from a
+    crashed or disconnected worker session) back to PENDING so they get retried.
+    A job is considered stale if it has been RUNNING for more than 5 minutes
+    and has no recorded completion time.
+    """
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            UPDATE scrape_jobs
+            SET status = 'PENDING', started_at = NULL
+            WHERE status = 'RUNNING'
+              AND started_at < NOW() - INTERVAL '5 minutes'
+            RETURNING id
+        """))
+        recovered = result.fetchall()
+        conn.commit()
+
+    if recovered:
+        for (job_id,) in recovered:
+            print(f"[{datetime.now().isoformat()}] ♻️  Recovered orphaned job: {job_id} → reset to PENDING")
+    else:
+        print(f"[{datetime.now().isoformat()}] No orphaned jobs found.")
+
+
 def run_worker():
     print(f"[{datetime.now().isoformat()}] Worker starting, waiting for jobs...")
+    recover_stale_jobs()
     while True:
         try:
             with engine.connect() as conn:
