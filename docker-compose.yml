@@ -8,7 +8,7 @@ version: '3.8'
 services:
   # ── Cloud SQL Auth Proxy ────────────────────────────────────────────────────
   cloud-sql-proxy:
-    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.8.0
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.10.0
     container_name: cloud-sql-proxy
     command:
       - "--address=0.0.0.0"
@@ -27,8 +27,8 @@ services:
       dockerfile: Dockerfile
     container_name: data-portal-backend
     environment:
-      # Connect to the local Auth Proxy container instead of public IP
-      - DATABASE_URL=postgresql://dataportal:${POSTGRES_PASSWORD:-DataPortal2024}@cloud-sql-proxy:5432/data_portal
+      # Connect to the native Windows Auth Proxy running on the host OS
+      - DATABASE_URL=postgresql://dataportal:${POSTGRES_PASSWORD:-DataPortal2024}@host.docker.internal:5432/data_portal
       - SECRET_KEY=${SECRET_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
