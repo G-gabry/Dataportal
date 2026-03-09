@@ -311,7 +311,7 @@ CREATE TRIGGER update_settings_updated_at BEFORE UPDATE ON settings
 
 -- Default admin user (password: admin123)
 INSERT INTO users (email, password_hash, name, role) VALUES
-('admin@dataportal.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.VTtYz0vpBKGKHi', 'Admin User', 'ADMIN');
+('admin@dataportal.com', '$2b$12$5PeQxQddUzbd35mUYGtlyOoMp9H8Tb.pJEgWpxbYgk0q7rxc7txtK', 'Admin User', 'ADMIN');
 
 -- Default AI settings
 INSERT INTO settings (key, value, description) VALUES
