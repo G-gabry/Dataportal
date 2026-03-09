@@ -60,7 +60,8 @@ def run_worker():
 
                 # 2. Mark as RUNNING
                 conn.execute(text(
-                    "UPDATE scrape_jobs SET status = 'RUNNING', started_at = NOW() WHERE id = :id"
+                    "UPDATE scrape_jobs SET status = 'RUNNING', started_at = NOW(), "
+                    "current_step = 'Pipeline starting', progress_percent = 5 WHERE id = :id"
                 ), {"id": job_id})
                 conn.commit()
 
@@ -75,22 +76,54 @@ def run_worker():
                 
                 print(f"[{datetime.now().isoformat()}] Streaming logs to {log_file}")
                 
+                # Step → progress % mapping from main.py log output
+                STEP_PROGRESS = {
+                    "step 0": 5,  "loading sources": 5,
+                    "step 1": 10, "discover": 15,
+                    "step 2": 25, "classif": 30,
+                    "step 3": 40, "crawl": 45,
+                    "step 4": 55, "resolve": 58,
+                    "step 5": 60, "extract": 70,
+                    "step 6": 85, "dedup": 87,
+                    "step 7": 90, "saving": 92,
+                    "step 8": 95, "save to database": 95,
+                }
+
                 with open(log_file, "w", encoding="utf-8") as f:
                     process = subprocess.Popen(
-                        cmd, 
-                        stdout=subprocess.PIPE, 
-                        stderr=subprocess.STDOUT, 
-                        text=True, 
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
                         bufsize=1
                     )
-                    
+
                     full_log = []
+                    last_progress_update = time.time()
                     for line in process.stdout:
                         print(line, end="")
                         f.write(line)
                         f.flush()
                         full_log.append(line)
-                        
+
+                        # Update progress every 5s based on log keywords
+                        now = time.time()
+                        if now - last_progress_update > 5:
+                            line_lower = line.lower()
+                            for keyword, pct in STEP_PROGRESS.items():
+                                if keyword in line_lower:
+                                    try:
+                                        with engine.connect() as progress_conn:
+                                            progress_conn.execute(text(
+                                                "UPDATE scrape_jobs SET progress_percent = :pct, "
+                                                "current_step = :step WHERE id = :id"
+                                            ), {"pct": pct, "step": line.strip()[:120], "id": job_id})
+                                            progress_conn.commit()
+                                    except Exception:
+                                        pass
+                                    last_progress_update = now
+                                    break
+
                     process.wait()
                 
                 # 4. Handle results and mark as COMPLETED or FAILED

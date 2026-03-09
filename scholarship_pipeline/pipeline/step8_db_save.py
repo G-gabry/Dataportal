@@ -22,8 +22,8 @@ from utils.logger import get_logger
 
 log = get_logger("step8_db_save")
 
-_TIMEOUT = 60  # seconds per request - increased for localtunnel
-_CONCURRENCY = 2  # parallel saves - reduced for localtunnel stability
+_TIMEOUT = 30  # seconds per request
+_CONCURRENCY = 8  # parallel saves
 
 
 def _auth_headers() -> dict:
